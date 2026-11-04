@@ -5,11 +5,11 @@ using [Confetti](https://github.com/hgs3/confetti) for parsing. Confetti directi
 are translated into Lispico expressions and evaluated by the existing Lispico
 interpreter and standard library.
 
-The initial implementation supports function calls, string and numeric literals,
-symbol references, and blocks of nested directives. A plain `{ ... }` block
-supplies one expression as the final argument; an explicit `do { ... }` block
-creates a Lispico `(do)` sequence. Parenthesized infix expressions and
-`if`/`else` syntax are planned but not implemented yet.
+The translator supports function calls, string and numeric literals, symbol
+references, nested directives, and parenthesized expressions with infix
+operators. A plain `{ … }` block supplies one expression as the final argument;
+an explicit `do { … }` block creates a Lispico `(do)` sequence. Conditional
+`else if` / `else` syntax is planned but not implemented yet.
 
 See [examples](examples), which also serve as regression tests. Expected
 translation failures are in [examples/fail](examples/fail).
@@ -29,6 +29,7 @@ Build and run the examples:
 ./lispico-confetti examples/hello.confetti
 ./lispico-confetti examples/blocks.confetti
 ./lispico-confetti examples/arrays.confetti
+./lispico-confetti examples/infix.confetti
 ./tests/run-examples.sh
 ```
 
@@ -133,7 +134,7 @@ The following blocks are rejected during translation:
 
 ```confetti
 var "empty" {} # Use `do {}` for an empty sequence
-var "answer" { # Use `do { ... }` for multiple expressions
+var "answer" { # Use `do { … }` for multiple expressions
   + 1 2
   + 3 4
 }
@@ -146,7 +147,7 @@ plain block cannot silently change the behavior of `(depth)`, `(leave)`,
 ### Implemented: Arrays
 
 Functions returning array values work as block results. Other array operations
-are ordinary directives. This uses Lispico's array support unchanged.
+are ordinary directives. This uses Lispico’s array support unchanged.
 
 Confetti:
 
@@ -170,17 +171,22 @@ Lispico:
 (assert (== second 20))
 ```
 
-### Planned: Infix operators and parenthesized expressions
+### Implemented: Infix operators and parenthesized expressions
 
-Symbolic binary functions such as `+`, `*`, `==`, and `<=` should be usable in
-infix position. Parentheses should group subexpressions with well-defined
-operator precedence, while ordinary directives should remain available.
+Symbolic binary functions can be used in infix position inside parentheses.
+The translator handles `*`, `/`, `+`, `-`, `<`, `<=`, `>`, `>=`, `==`, and `!=`.
+Multiplication and division bind more tightly than addition and subtraction;
+comparisons follow arithmetic, and equality follows comparisons. Operators
+with equal precedence associate from left to right. Lispico’s own functions
+perform the actual calculations and type validation.
 
-Confetti (not yet supported):
+Confetti:
 
 ```confetti
 var "answer" (1 + (2 * 3))
 assert (answer == 7)
+var "difference" (20 - 5 - 3)
+assert (difference == 12)
 ```
 
 Lispico:
@@ -188,17 +194,29 @@ Lispico:
 ```lisp
 (var "answer" (+ 1 (* 2 3)))
 (assert (== answer 7))
+(var "difference" (- (- 20 5) 3))
+(assert (== difference 12))
 ```
 
-### Planned: Nested calls inside infix expressions
+Parentheses also group subexpressions without introducing a Lispico `(do)`
+scope. A signed numeric literal such as `-2` retains Lispico’s signed type.
+Keep spaces around subtraction when using names containing hyphens (for
+example, `arr-get`), so a hyphen in a name is not mistaken for subtraction.
 
-Confetti (not yet supported):
+### Implemented: Nested calls inside infix expressions
+
+The first name in a parenthesized expression can also introduce a Lispico
+function call when it is followed by arguments. Symbolic function names can
+be used in prefix position too, as in `(+ 1 2)`.
+
+Confetti:
 
 ```confetti
 var "numbers" {
   arr 10 20 30
 }
 assert ((arr-get "numbers" 1) == 20)
+assert (((arr-get "numbers" 2) + 2) == 32)
 ```
 
 Lispico:
@@ -206,13 +224,21 @@ Lispico:
 ```lisp
 (var "numbers" (arr 10 20 30))
 (assert (== (arr-get "numbers" 1) 20))
+(assert (== (+ (arr-get "numbers" 2) 2) 32))
 ```
+
+An expression containing only one bare name, such as `(answer)`, groups that
+symbol reference. It does not call a zero-argument function. For an ordinary
+zero-argument function, use a Confetti directive instead.
 
 ### Planned: `if`, `else if`, and `else`
 
 The intended conditional syntax should translate into Lispico’s existing
 `if` function with nested expressions. A branch with one expression needs no
-`(do)` wrapper; a branch containing a sequence must use `do { ... }`.
+`(do)` wrapper; a branch containing a sequence must use `do { … }`.
+
+An `if` directive with a parenthesized condition and a single-expression
+branch already works. Chaining `else if` and `else` is still planned.
 
 Confetti (not yet supported):
 
@@ -237,7 +263,7 @@ Lispico:
 ```
 
 To execute more than one expression in a branch, explicitly introduce a
-sequence (the infix condition and `else` syntax are still planned):
+sequence (`else` syntax is still planned):
 
 ```confetti
 if (5 > 2) do {
@@ -262,19 +288,20 @@ Lispico:
 
 - [x] Translate basic Confetti directives into Lispico function calls.
 - [x] Preserve quoted strings, numbers, and unquoted symbol references.
-- [x] Translate single-expression `{ ... }` blocks into expression-valued arguments.
-- [x] Support explicit `do { ... }` sequences without an extra scope.
+- [x] Translate single-expression `{ … }` blocks into expression-valued arguments.
+- [x] Support explicit `do { … }` sequences without an extra scope.
 - [x] Reject empty or multi-expression plain blocks with a suggestion to use `do`.
-- [ ] Parse parenthesized expressions, nested function calls, and infix operators
+- [x] Parse parenthesized expressions, nested function calls, and infix operators
       with precedence and associativity.
 - [ ] Translate conditional `if` / `else if` / `else` chains.
-- [ ] Define and test how Confetti's string escaping maps to Lispico strings,
+- [ ] Define and test how Confetti’s string escaping maps to Lispico strings,
       including `\n`, `\0`, and embedded NUL bytes.
 - [ ] Expand working examples and failure tests to cover the new syntax.
 - [ ] Port the original Lispico examples to `.confetti` equivalents.
 
-The current implementation deliberately reports an error for parenthesized
-expression arguments rather than silently interpreting them as plain strings.
+Parenthesized expressions have their own syntax and are never silently
+interpreted as plain strings. The translator reports errors for empty
+expressions, incomplete operators, and unsupported operators.
 
 ## Development environment
 
@@ -325,7 +352,7 @@ call ale#linter#Define('c', {
 \ 'callback': 'ale#handlers#gcc#HandleGCCFormatWithIncludes',
 \})
 
-" Use this checker only for Lispico Confetti's own C sources
+" Use this checker only for Lispico Confetti’s own C sources
 augroup lispico_confetti_ale
   autocmd!
   autocmd BufReadPost,BufNewFile */lispico-confetti/src/*.c

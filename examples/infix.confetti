@@ -1,0 +1,28 @@
+# Infix operators follow arithmetic precedence and group with parentheses.
+var "answer" (1 + (2 * 3))
+assert (answer == 7)
+
+# Arithmetic operators associate from left to right.
+var "difference" (20 - 5 - 3)
+assert (difference == 12)
+assert ((1 + 6 / 2) == 4)
+assert ((2 + 2 * 3) >= 8)
+assert ((2 * 3) != 7)
+
+# Numeric signs preserve Lispico’s signed and unsigned literal types.
+var "negative" (-2 + -3)
+assert (negative == -5)
+
+# Parenthesized native calls can be nested inside infix expressions.
+var "numbers" {
+  arr 10 20 30
+}
+assert ((arr-get "numbers" 1) == 20)
+assert (((arr-get "numbers" 2) + 2) == 32)
+assert ((str "Hello" " world") == "Hello world")
+assert ((+ 1 2) == 3)
+
+# Conditions already work through Lispico’s existing `(if)` special form.
+if (answer > 5) {
+  assert (answer == 7)
+}
