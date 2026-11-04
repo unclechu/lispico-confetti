@@ -53,10 +53,10 @@ augroup force_c_headers
   autocmd BufReadPost,BufNewFile *.h setlocal filetype=c
 augroup END
 
-" I prefer different treesitter syntax highlighting over default commonlisp one
-augroup force_custom_lisp_syntax_hl
+" Use Nginx syntax highlighting for Confetti files
+augroup force_confetti_syntax_hl
   autocmd!
-  autocmd BufReadPost,BufNewFile *.lisp setlocal filetype=scheme
+  autocmd BufReadPost,BufNewFile *.confetti setlocal filetype=nginx
 augroup END
 
 let g:ale_linters_explicit = 1
