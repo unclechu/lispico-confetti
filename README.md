@@ -177,7 +177,9 @@ Symbolic binary functions can be used in infix position inside parentheses.
 The translator handles `*`, `/`, `+`, `-`, `<`, `<=`, `>`, `>=`, `==`, and `!=`.
 Multiplication and division bind more tightly than addition and subtraction;
 comparisons follow arithmetic, and equality follows comparisons. Operators
-with equal precedence associate from left to right. Lispico’s own functions
+with equal precedence associate from left to right. Consecutive uses of the
+same arithmetic operator (`+`, `-`, `*`, or `/`) become one variadic Lispico
+call. Comparisons and equality remain binary calls. Lispico’s own functions
 perform the actual calculations and type validation.
 
 Confetti:
@@ -194,9 +196,15 @@ Lispico:
 ```lisp
 (var "answer" (+ 1 (* 2 3)))
 (assert (== answer 7))
-(var "difference" (- (- 20 5) 3))
+(var "difference" (- 20 5 3))
 (assert (== difference 12))
 ```
+
+Different operators and explicitly parenthesized expressions preserve their
+grouping. For example, `(20 - 5 + 3)` translates to `(+ (- 20 5) 3)`, while
+`(20 - (5 - 3))` translates to `(- 20 (- 5 3))`. When a chain exceeds Lispico’s
+native argument capacity, the translator starts another nested call to avoid
+exceeding that limit.
 
 Parentheses also group subexpressions without introducing a Lispico `(do)`
 scope. A signed numeric literal such as `-2` retains Lispico’s signed type.
@@ -229,7 +237,18 @@ Lispico:
 
 An expression containing only one bare name, such as `(answer)`, groups that
 symbol reference. It does not call a zero-argument function. For an ordinary
-zero-argument function, use a Confetti directive instead.
+zero-argument function, use a Confetti directive instead. When an enclosing
+function expects its result, place that directive in a single-expression block:
+
+```confetti
+var "collected" {
+  gc
+}
+```
+
+This translates to `(var "collected" (gc))`. Curly braces supply a nested
+directive to the surrounding function; they do not replace the surrounding
+function call.
 
 ### Planned: `if`, `else if`, and `else`
 
@@ -293,6 +312,8 @@ Lispico:
 - [x] Reject empty or multi-expression plain blocks with a suggestion to use `do`.
 - [x] Parse parenthesized expressions, nested function calls, and infix operators
       with precedence and associativity.
+- [x] Flatten consecutive arithmetic operators into variadic Lispico calls,
+      retaining parentheses and native argument limits.
 - [ ] Translate conditional `if` / `else if` / `else` chains.
 - [ ] Define and test how Confetti’s string escaping maps to Lispico strings,
       including `\n`, `\0`, and embedded NUL bytes.

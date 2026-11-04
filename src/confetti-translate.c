@@ -391,6 +391,15 @@ static int infix_operator_precedence(const InfixParser *parser) {
   return -1;
 }
 
+// Lispico’s arithmetic functions accept two or more arguments, accumulating
+// the result from left to right. Comparisons and equality are binary only.
+static bool is_variadic_infix_operator(const InfixParser *parser, InfixToken token) {
+  if (token.kind != INFIX_TOKEN_OPERATOR || token.length != 1) return false;
+
+  char c = parser->text[token.start];
+  return c == '+' || c == '-' || c == '*' || c == '/';
+}
+
 static bool new_infix_function_name(
   InfixParser *parser,
   InfixToken token,
@@ -598,8 +607,9 @@ static bool parse_infix_primary(InfixParser *parser, uint32_t *index) {
   }
 }
 
-// Precedence climbing constructs left-associative nested Lispico calls.
-// For example, `1 + 2 * 3` becomes `(+ 1 (* 2 3))`.
+// Precedence climbing preserves left-to-right evaluation. Consecutive uses of
+// the same variadic arithmetic operator share a single Lispico function call:
+// `20 - 5 - 3` becomes `(- 20 5 3)`, while `1 + 2 * 3` becomes `(+ 1 (* 2 3))`.
 static bool parse_infix_expression(
   InfixParser *parser,
   int minimum_precedence,
@@ -607,6 +617,10 @@ static bool parse_infix_expression(
 ) {
   uint32_t left = EXPR_NONE;
   if (!parse_infix_primary(parser, &left)) return false;
+
+  InfixToken previous_operator = {0};
+  uint32_t last_argument = EXPR_NONE;
+  size_t argument_count = 0;
 
   for (;;) {
     int precedence = infix_operator_precedence(parser);
@@ -618,11 +632,35 @@ static bool parse_infix_expression(
     uint32_t right = EXPR_NONE;
     if (!parse_infix_expression(parser, precedence + 1, &right)) return false;
 
-    uint32_t function_index = EXPR_NONE;
-    if (!new_infix_function_name(parser, operator, &function_index)) return false;
+    // Extend only the chain created in this parsing scope. An explicitly
+    // parenthesized left operand remains a separate expression. Respect the
+    // evaluator’s argument capacity by starting a new call when a chain fills.
+    bool extend_chain = (
+      argument_count < EVAL_ARG_CAPACITY &&
+      is_variadic_infix_operator(parser, operator) &&
+      previous_operator.length == operator.length &&
+      memcmp(
+        parser->text + previous_operator.start,
+        parser->text + operator.start,
+        operator.length
+      ) == 0
+    );
 
-    uint32_t arguments[2] = { left, right };
-    if (!new_infix_call(parser, function_index, arguments, 2, &left)) return false;
+    if (extend_chain) {
+      append_child(parser->translator->interpreter, left, &last_argument, right);
+      argument_count++;
+    } else {
+      uint32_t function_index = EXPR_NONE;
+      if (!new_infix_function_name(parser, operator, &function_index)) return false;
+
+      uint32_t arguments[2] = { left, right };
+      if (!new_infix_call(parser, function_index, arguments, 2, &left)) return false;
+
+      argument_count = 2;
+      last_argument = right;
+    }
+
+    previous_operator = operator;
   }
 
   *index = left;

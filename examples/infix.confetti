@@ -3,11 +3,19 @@ var "answer" (1 + (2 * 3))
 assert (answer == 7)
 
 # Arithmetic operators associate from left to right.
+# Repeated arithmetic operators share one variadic Lispico call.
 var "difference" (20 - 5 - 3)
 assert (difference == 12)
+assert ((2 * 3 * 4) == 24)
+assert ((100 / 2 / 5) == 10)
+assert ((20 - 5 + 3) == 18) # Different operators remain nested
+assert ((20 - (5 - 3)) == 18) # Parentheses preserve their grouping
 assert ((1 + 6 / 2) == 4)
 assert ((2 + 2 * 3) >= 8)
 assert ((2 * 3) != 7)
+
+# More than EVAL_ARG_CAPACITY operands create another nested call when needed.
+assert ((1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10 + 11 + 12 + 13 + 14 + 15 + 16 + 17) == 153)
 
 # Numeric signs preserve Lispico’s signed and unsigned literal types.
 var "negative" (-2 + -3)
