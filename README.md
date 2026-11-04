@@ -37,6 +37,15 @@ nix-build -A lispico-confetti
 ./result/bin/lispico-confetti examples/hello.confetti
 ```
 
+In this case the Lispico and Confetti dependencies would be pulled using the Nix
+pins. If you want to use submodules from your local copy of the repository then
+just add `--arg useLocalSubmodules true`:
+
+```sh
+nix-build -A lispico-confetti --arg useLocalSubmodules true
+./result/bin/lispico-confetti examples/hello.confetti
+```
+
 ## Language examples
 
 The examples below show how Confetti directives map to Lispico expressions.
@@ -235,6 +244,12 @@ Create `.envrc` file:
 
 ```sh
 use nix --arg useLocalSubmodules true
+```
+
+Make sure you have submodules fetched:
+
+```sh
+git submodule update --init --recursive
 ```
 
 ### Local Vim configuration example
