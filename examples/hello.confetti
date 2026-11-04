@@ -1,0 +1,10 @@
+# Simple directives, variables, and string literals.
+println "Hello, Confetti!"
+
+var "name" "World"
+println name
+println "name"
+
+# The same numeric-literal parsing rules as Lispico.
+var "answer" 42
+assert answer
