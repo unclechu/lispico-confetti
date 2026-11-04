@@ -5,11 +5,12 @@ using [Confetti](https://github.com/hgs3/confetti) for parsing. Confetti directi
 are translated into Lispico expressions and evaluated by the existing Lispico
 interpreter and standard library.
 
-The initial implementation supports simple function calls, string and numeric
-literals, and symbol references. Parenthesized infix expressions, blocks, and
-conditional syntax are planned but not implemented yet.
+The initial implementation supports function calls, string and numeric literals,
+symbol references, and blocks of nested directives. Blocks become Lispico `(do)`
+expressions and can supply the final argument to a function call. Parenthesized
+infix expressions and `if`/`else` syntax are planned but not implemented yet.
 
-See [examples](examples), they are also used as regression tests.
+See [examples](examples), which also serve as regression tests.
 
 ## Usage examples
 
@@ -19,11 +20,14 @@ Locally make sure you have Lispico and Confetti Git submodules initialized:
 git submodule update --init --recursive
 ```
 
-Build and run the first example:
+Build and run the examples:
 
 ```sh
 ./build.sh
 ./lispico-confetti examples/hello.confetti
+./lispico-confetti examples/blocks.confetti
+./lispico-confetti examples/arrays.confetti
+./tests/run-examples.sh
 ```
 
 Or build with Nix:
@@ -33,10 +37,195 @@ nix-build -A lispico-confetti
 ./result/bin/lispico-confetti examples/hello.confetti
 ```
 
-Currently, simple directives map directly to Lispico function calls. For
-example, `println "Hello"` corresponds to `(println "Hello")`, while
-`var "name" "World"` corresponds to `(var "name" "World")`. Quoted arguments
-remain string literals; unquoted names become symbol references.
+## Language examples
+
+The examples below show how Confetti directives map to Lispico expressions.
+**Implemented** examples run with the current translator. **Planned** examples
+describe the intended syntax; the translator does not accept them yet.
+
+### Implemented: Calls, literals, and symbol references
+
+A directive names a function followed by its arguments. Quoted words are
+strings, while unquoted words are Lispico symbol references; numbers are
+parsed using Lispico's numeric literal rules.
+
+Confetti:
+
+```confetti
+var "name" "World"
+println name
+println "name"
+```
+
+Lispico:
+
+```lisp
+(var "name" "World")
+(println name)
+(println "name")
+```
+
+### Implemented: An expression as the last argument
+
+Curly braces group nested directives. The last directive in a block supplies
+the block's value. The translator wraps a block in `(do ...)`, making it one
+argument to the surrounding function call.
+
+Confetti:
+
+```confetti
+var "answer" {
+  + 1 2
+}
+
+assert {
+  == answer 3
+}
+```
+
+Lispico:
+
+```lisp
+(var "answer" (do (+ 1 2)))
+(assert (do (== answer 3)))
+```
+
+### Implemented: Sequences and nested blocks
+
+Multiple directives inside a block are evaluated in order, and the last value
+becomes the result. A standalone `do` block maps directly to one Lispico `do`
+call, without adding an extra nested `do` scope.
+
+Confetti:
+
+```confetti
+var "answer" {
+  var "first" 10
+  + first 5
+}
+
+do {
+  println "The result is:"
+  println answer
+}
+```
+
+Lispico:
+
+```lisp
+(var "answer" (do (var "first" 10) (+ first 5)))
+(do (println "The result is:") (println answer))
+```
+
+### Implemented: Arrays
+
+Functions returning array values work as block results. Other array operations
+are ordinary directives. This uses Lispico's array support unchanged.
+
+Confetti:
+
+```confetti
+var "numbers" {
+  arr 10 20 30
+}
+var "second" {
+  arr-get "numbers" 1
+}
+assert {
+  == second 20
+}
+```
+
+Lispico:
+
+```lisp
+(var "numbers" (do (arr 10 20 30)))
+(var "second" (do (arr-get "numbers" 1)))
+(assert (do (== second 20)))
+```
+
+### Planned: Infix operators and parenthesized expressions
+
+Symbolic binary functions such as `+`, `*`, `==`, and `<=` should be usable in
+infix position. Parentheses should group subexpressions with well-defined
+operator precedence, while ordinary directives should remain available.
+
+Confetti (not yet supported):
+
+```confetti
+var "answer" (1 + (2 * 3))
+assert (answer == 7)
+```
+
+Lispico:
+
+```lisp
+(var "answer" (+ 1 (* 2 3)))
+(assert (== answer 7))
+```
+
+### Planned: Nested calls inside infix expressions
+
+Confetti (not yet supported):
+
+```confetti
+var "numbers" {
+  arr 10 20 30
+}
+assert ((arr-get "numbers" 1) == 20)
+```
+
+Lispico:
+
+```lisp
+(var "numbers" (arr 10 20 30))
+(assert (== (arr-get "numbers" 1) 20))
+```
+
+### Planned: `if`, `else if`, and `else`
+
+The intended conditional syntax should translate into Lispico's existing
+`if` function with nested expressions. A branch's `{ ... }` block should be
+one expression with `do` semantics.
+
+Confetti (not yet supported):
+
+```confetti
+if (5 > 2) {
+  println "bigger"
+} else if (5 < 2) {
+  println "smaller"
+} else {
+  println "equal"
+}
+```
+
+Lispico:
+
+```lisp
+(if (> 5 2)
+  (do (println "bigger"))
+  (if (< 5 2)
+    (do (println "smaller"))
+    (do (println "equal"))))
+```
+
+## Implementation roadmap
+
+- [x] Translate basic Confetti directives into Lispico function calls.
+- [x] Preserve quoted strings, numbers, and unquoted symbol references.
+- [x] Translate nested directive blocks into expression-valued arguments.
+- [x] Support direct `do { ... }` blocks without an extra scope.
+- [ ] Parse parenthesized expressions, nested function calls, and infix operators
+      with precedence and associativity.
+- [ ] Translate conditional `if` / `else if` / `else` chains.
+- [ ] Define and test how Confetti's string escaping maps to Lispico strings,
+      including `\n`, `\0`, and embedded NUL bytes.
+- [ ] Expand working examples and failure tests to cover the new syntax.
+- [ ] Port the original Lispico examples to `.confetti` equivalents.
+
+The current implementation deliberately reports an error for parenthesized
+expression arguments rather than silently interpreting them as plain strings.
 
 ## Local Vim configuration example
 

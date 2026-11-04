@@ -1,0 +1,22 @@
+# A block can provide an array value as the last argument to `(var)`.
+var "numbers" {
+  arr 10 20 30
+}
+
+var "second" {
+  arr-get "numbers" 1
+}
+
+assert {
+  == second 20
+}
+
+arr-set "numbers" 1 42
+
+var "updated" {
+  arr-get "numbers" 1
+}
+
+assert {
+  == updated 42
+}

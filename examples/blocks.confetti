@@ -1,0 +1,17 @@
+# Blocks evaluate their directives in order and return the final result.
+var "answer" {
+  var "first" 10
+  + first 5
+}
+
+assert {
+  == answer 15
+}
+
+# The `do` directive is a sequence, not an extra nested `(do)` scope.
+do {
+  assert {
+    == answer 15
+  }
+  println "Block evaluation works"
+}
