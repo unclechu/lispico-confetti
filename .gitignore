@@ -4,10 +4,12 @@ result-*
 
 # GCC build artifacts
 *.o
-build/
 lispico-confetti
 
 # Archives
 *.zip
 *.tar
 *.gz
+
+# direnv configuration
+.envrc

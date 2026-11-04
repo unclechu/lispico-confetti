@@ -227,7 +227,17 @@ Lispico:
 The current implementation deliberately reports an error for parenthesized
 expression arguments rather than silently interpreting them as plain strings.
 
-## Local Vim configuration example
+## Development environment
+
+### [direnv](https://direnv.net) configuration example
+
+Create `.envrc` file:
+
+```sh
+use nix --arg useLocalSubmodules true
+```
+
+### Local Vim configuration example
 
 ```vim
 se cc=81,101 tw=100
