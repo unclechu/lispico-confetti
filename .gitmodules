@@ -1,0 +1,6 @@
+[submodule "lispico"]
+	path = lispico
+	url = https://github.com/unclechu/lispico
+[submodule "confetti"]
+	path = confetti
+	url = https://github.com/hgs3/confetti

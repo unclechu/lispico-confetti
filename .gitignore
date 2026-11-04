@@ -1,0 +1,13 @@
+# Nix default build artifacts
+result
+result-*
+
+# GCC build artifacts
+*.o
+build/
+lispico-confetti
+
+# Archives
+*.zip
+*.tar
+*.gz
