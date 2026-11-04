@@ -4,25 +4,12 @@
 
 , inNixShell ? false
 
+# Run first before enabling:
+#   git submodule update --init --recursive
 , useLocalSubmodules ? false
 
-, lispicoSrc ?
-    pkgs.fetchFromGitHub {
-      owner = "unclechu";
-      repo = "lispico";
-      rev = "fc54fd678ab33e45cb12b2ebad20878cf2a96fd3";
-      hash = "sha256-5fB9rAOquA7oGcmVhRTa0NN/xVmzaZyVQdXssO2xjlo=";
-    }
-
-, confettiSrc ?
-    pkgs.fetchFromGitHub {
-      owner = "hgs3";
-      repo = "confetti";
-      # `master` slightly past `v1.0.0` release tag
-      # (`v1.0.0` should work just as well).
-      rev = "03e114d30b78f9cd49abf170122ca624bbd164bd";
-      hash = "sha256-GSmTOjomwJFbaFMoa4FjV0rBdOF6lwM1wbSNuz4h0nk=";
-    }
+, lispicoSrc ? import nix/lispico-pin.nix
+, confettiSrc ? import nix/confetti-pin.nix
 }:
 
 let
@@ -44,7 +31,8 @@ let
 
     # Note that `lispico` and `confetti` Git submodules must be initialized
     # when `useLocalSubmodules` is `true`!
-    # Run first: git submodule update --init --recursive
+    # Run first:
+    #   git submodule update --init --recursive
     src = pkgs.nix-gitignore.gitignoreFilterRecursiveSource (path: type:
       (type == "directory" && builtins.baseNameOf path == "src") ||
       (useLocalSubmodules && type == "directory" && builtins.baseNameOf path == "lispico") ||
