@@ -1,0 +1,1 @@
+var "value" {} # Empty blocks require an explicit `do`

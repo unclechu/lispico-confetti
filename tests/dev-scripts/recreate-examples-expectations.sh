@@ -145,10 +145,9 @@ if (( $# == 0 )) || ( (( $# == 1 )) && [[ $1 == missing ]] ); then
     handle-example "$source"
   done
 
-  # TODO: All expected failures
-  # for source in examples/fail/*.confetti; do
-  #   handle-example "$source"
-  # done
+  for source in examples/fail/*.confetti; do
+    handle-example "$source"
+  done
 
 # Re-generate only for a specific example file.
 elif (( $# == 1 )); then

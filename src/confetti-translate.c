@@ -204,7 +204,7 @@ static void append_child(
   *previous_child = child_index;
 }
 
-// Create the function-name expression used by an implicit `(do)` block.
+// Create the function-name expression used by an explicit `do` block argument.
 static bool new_do_name(ConfettiTranslator *translator, uint32_t *index) {
   if (!new_expression(translator, EXPR_NAME, index)) return false;
   return store_text(
@@ -264,22 +264,47 @@ static bool translate_directive(
   uint32_t *index
 );
 
-// A block supplies one final argument, represented by a Lispico `(do)` list.
-// For `do { ... }`, attach the expressions directly to avoid an extra `(do)`
-// scope, which would otherwise change the behavior of `(depth)` and `(leave)`.
+// A plain `{ … }` block supplies exactly one expression as the last argument.
+// An explicit `do { … }` block creates a Lispico `(do)` sequence instead.
+// For a standalone `do { … }`, attach the expressions directly to the
+// existing `(do)` call to avoid introducing an additional sequence boundary.
 static bool translate_block(
   ConfettiTranslator *translator,
   const conf_directive *directive,
   uint32_t list_index,
   uint32_t *previous_child,
-  bool flatten_do
+  bool flatten_do,
+  bool explicit_do
 ) {
   Interpreter *interpreter = translator->interpreter;
+  long directive_count = conf_get_directive_count(directive);
+
+  // A plain block has no implicit `(do)` scope. Requiring exactly one
+  // expression prevents adding another directive from silently changing
+  // the behavior of `(depth)`, `(leave)`, `(defer)`, or `(goto)`.
+  if (!flatten_do && !explicit_do && directive_count != 1) {
+    if (directive_count == 0) {
+      snprintf(
+        *translator->error,
+        ERR_MSG_SIZE,
+        "Empty expression block; use `do {}` for an empty sequence"
+      );
+    } else {
+      snprintf(
+        *translator->error,
+        ERR_MSG_SIZE,
+        "Block contains %ld expressions; use `do { … }` for a sequence",
+        directive_count
+      );
+    }
+    return false;
+  }
+
   uint32_t block_index = list_index;
   uint32_t block_previous_child = EXPR_NONE;
   uint32_t *block_previous = previous_child;
 
-  if (!flatten_do) {
+  if (explicit_do && !flatten_do) {
     if (!new_expression(translator, EXPR_LIST, &block_index)) return false;
 
     uint32_t do_name = EXPR_NONE;
@@ -289,8 +314,6 @@ static bool translate_block(
     block_previous = &block_previous_child;
   }
 
-  long directive_count = conf_get_directive_count(directive);
-
   for (long i = 0; i < directive_count; ++i) {
     const conf_directive *child_directive = conf_get_directive(directive, i);
     uint32_t child_index = EXPR_NONE;
@@ -299,7 +322,7 @@ static bool translate_block(
     append_child(interpreter, block_index, block_previous, child_index);
   }
 
-  if (!flatten_do)
+  if (explicit_do && !flatten_do)
     append_child(interpreter, list_index, previous_child, block_index);
 
   return true;
@@ -307,7 +330,8 @@ static bool translate_block(
 
 // Each Confetti directive becomes a Lispico function-call expression.
 // `println "Hello"` becomes `(println "Hello")`.
-// `var "x" { + 1 2 }` becomes `(var "x" (do (+ 1 2)))`.
+// `var "x" { + 1 2 }` becomes `(var "x" (+ 1 2))`.
+// `var "x" do { + 1 2 }` becomes `(var "x" (do (+ 1 2)))`.
 static bool translate_directive(
   ConfettiTranslator *translator,
   const conf_directive *directive,
@@ -321,9 +345,28 @@ static bool translate_directive(
 
   if (!new_expression(translator, EXPR_LIST, index)) return false;
 
+  bool has_block = has_directive_block(translator, directive);
+  bool explicit_do = false;
+
+  // The trailing bare `do` before a block is a sequence marker, not an
+  // argument to the surrounding function. Leave `do` as an ordinary argument
+  // when there is no block, or when it appears inside a quoted string.
+  if (has_block && argument_count > 1) {
+    const conf_argument *last_argument = conf_get_argument(directive, argument_count - 1);
+    explicit_do = (
+      last_argument != NULL &&
+      last_argument->value != NULL &&
+      !last_argument->is_expression &&
+      last_argument->lexeme_offset < translator->source_length &&
+      translator->source[last_argument->lexeme_offset] == 'd' &&
+      strcmp(last_argument->value, "do") == 0
+    );
+  }
+
+  long translated_argument_count = explicit_do ? argument_count - 1 : argument_count;
   uint32_t previous_child = EXPR_NONE;
 
-  for (long i = 0; i < argument_count; ++i) {
+  for (long i = 0; i < translated_argument_count; ++i) {
     const conf_argument *argument = conf_get_argument(directive, i);
     uint32_t child = EXPR_NONE;
 
@@ -339,15 +382,22 @@ static bool translate_directive(
     return false;
   }
 
-  if (has_directive_block(translator, directive)) {
+  if (has_block) {
     const conf_argument *fn_argument = conf_get_argument(directive, 0);
     bool flatten_do = (
-      argument_count == 1 &&
+      translated_argument_count == 1 &&
       fn_argument != NULL &&
       strcmp(fn_argument->value, "do") == 0
     );
 
-    if (!translate_block(translator, directive, *index, &previous_child, flatten_do))
+    if (!translate_block(
+      translator,
+      directive,
+      *index,
+      &previous_child,
+      flatten_do,
+      explicit_do
+    ))
       return false;
   }
 

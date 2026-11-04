@@ -6,11 +6,13 @@ are translated into Lispico expressions and evaluated by the existing Lispico
 interpreter and standard library.
 
 The initial implementation supports function calls, string and numeric literals,
-symbol references, and blocks of nested directives. Blocks become Lispico `(do)`
-expressions and can supply the final argument to a function call. Parenthesized
-infix expressions and `if`/`else` syntax are planned but not implemented yet.
+symbol references, and blocks of nested directives. A plain `{ ... }` block
+supplies one expression as the final argument; an explicit `do { ... }` block
+creates a Lispico `(do)` sequence. Parenthesized infix expressions and
+`if`/`else` syntax are planned but not implemented yet.
 
-See [examples](examples), which also serve as regression tests.
+See [examples](examples), which also serve as regression tests. Expected
+translation failures are in [examples/fail](examples/fail).
 
 ## Usage examples
 
@@ -56,7 +58,7 @@ describe the intended syntax; the translator does not accept them yet.
 
 A directive names a function followed by its arguments. Quoted words are
 strings, while unquoted words are Lispico symbol references; numbers are
-parsed using Lispico's numeric literal rules.
+parsed using Lispico’s numeric literal rules.
 
 Confetti:
 
@@ -76,9 +78,8 @@ Lispico:
 
 ### Implemented: An expression as the last argument
 
-Curly braces group nested directives. The last directive in a block supplies
-the block's value. The translator wraps a block in `(do ...)`, making it one
-argument to the surrounding function call.
+Plain curly braces group exactly one nested directive, which supplies one
+argument to the surrounding function call without introducing a `(do)` scope.
 
 Confetti:
 
@@ -95,20 +96,22 @@ assert {
 Lispico:
 
 ```lisp
-(var "answer" (do (+ 1 2)))
-(assert (do (== answer 3)))
+(var "answer" (+ 1 2))
+(assert (== answer 3))
 ```
 
 ### Implemented: Sequences and nested blocks
 
-Multiple directives inside a block are evaluated in order, and the last value
-becomes the result. A standalone `do` block maps directly to one Lispico `do`
-call, without adding an extra nested `do` scope.
+Use an explicit `do` marker to group multiple directives. They are evaluated
+in order, and the last value becomes the result. A standalone `do` block maps
+directly to one Lispico `do` call, without adding another nested `(do)` scope.
+An explicit `do` also introduces a sequence when the block contains zero or
+one directive.
 
 Confetti:
 
 ```confetti
-var "answer" {
+var "answer" do {
   var "first" 10
   + first 5
 }
@@ -125,6 +128,20 @@ Lispico:
 (var "answer" (do (var "first" 10) (+ first 5)))
 (do (println "The result is:") (println answer))
 ```
+
+The following blocks are rejected during translation:
+
+```confetti
+var "empty" {} # Use `do {}` for an empty sequence
+var "answer" { # Use `do { ... }` for multiple expressions
+  + 1 2
+  + 3 4
+}
+```
+
+This makes the control-flow boundary explicit: adding another directive to a
+plain block cannot silently change the behavior of `(depth)`, `(leave)`,
+`(defer)`, or `(goto)`.
 
 ### Implemented: Arrays
 
@@ -148,9 +165,9 @@ assert {
 Lispico:
 
 ```lisp
-(var "numbers" (do (arr 10 20 30)))
-(var "second" (do (arr-get "numbers" 1)))
-(assert (do (== second 20)))
+(var "numbers" (arr 10 20 30))
+(var "second" (arr-get "numbers" 1))
+(assert (== second 20))
 ```
 
 ### Planned: Infix operators and parenthesized expressions
@@ -193,9 +210,9 @@ Lispico:
 
 ### Planned: `if`, `else if`, and `else`
 
-The intended conditional syntax should translate into Lispico's existing
-`if` function with nested expressions. A branch's `{ ... }` block should be
-one expression with `do` semantics.
+The intended conditional syntax should translate into Lispico’s existing
+`if` function with nested expressions. A branch with one expression needs no
+`(do)` wrapper; a branch containing a sequence must use `do { ... }`.
 
 Confetti (not yet supported):
 
@@ -213,18 +230,41 @@ Lispico:
 
 ```lisp
 (if (> 5 2)
-  (do (println "bigger"))
+  (println "bigger")
   (if (< 5 2)
-    (do (println "smaller"))
-    (do (println "equal"))))
+    (println "smaller")
+    (println "equal")))
+```
+
+To execute more than one expression in a branch, explicitly introduce a
+sequence (the infix condition and `else` syntax are still planned):
+
+```confetti
+if (5 > 2) do {
+  println "bigger"
+  println "definitely bigger"
+} else {
+  println "not bigger"
+}
+```
+
+Lispico:
+
+```lisp
+(if (> 5 2)
+  (do
+    (println "bigger")
+    (println "definitely bigger"))
+  (println "not bigger"))
 ```
 
 ## Implementation roadmap
 
 - [x] Translate basic Confetti directives into Lispico function calls.
 - [x] Preserve quoted strings, numbers, and unquoted symbol references.
-- [x] Translate nested directive blocks into expression-valued arguments.
-- [x] Support direct `do { ... }` blocks without an extra scope.
+- [x] Translate single-expression `{ ... }` blocks into expression-valued arguments.
+- [x] Support explicit `do { ... }` sequences without an extra scope.
+- [x] Reject empty or multi-expression plain blocks with a suggestion to use `do`.
 - [ ] Parse parenthesized expressions, nested function calls, and infix operators
       with precedence and associativity.
 - [ ] Translate conditional `if` / `else if` / `else` chains.

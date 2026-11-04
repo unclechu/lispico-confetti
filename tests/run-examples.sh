@@ -166,14 +166,14 @@ for source in examples/*.confetti; do
   run_test "$source" "tests/expected-examples/$name"
 done
 
-# TODO: Test all expected failures
-# for source in examples/fail/*.confetti; do
-#   # Get the name with parent directory path and *.confetti extension removed
-#   name="${source##*/}"
-#   name="${name%.confetti}"
-#
-#   run_test "$source" "tests/expected-examples/fail/$name"
-# done
+# Test all expected failures
+for source in examples/fail/*.confetti; do
+  # Get the name with parent directory path and *.confetti extension removed
+  name="${source##*/}"
+  name="${name%.confetti}"
+
+  run_test "$source" "tests/expected-examples/fail/$name"
+done
 
 if (( failed != 0 )); then
   PASS_HL=$O_SECONDARY_COLOR
