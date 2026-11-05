@@ -84,6 +84,75 @@ static bool store_text(
   return true;
 }
 
+// Confetti has already removed its own escapes from the argument value.
+// Decode the remaining backslash sequences using Lispico’s string literal rules.
+// Confetti turns "\\n" into "\n" (two literal bytes), and this second pass
+// turns those bytes into a newline character.
+// Use an explicit length because the resulting string may contain NUL bytes.
+static bool translate_string_value(
+  ConfettiTranslator *translator,
+  const char *value,
+  size_t value_length,
+  size_t byte_offset,
+  uint32_t *index
+) {
+  // Decoding replaces or removes bytes, so the result never grows beyond
+  // the Confetti-decoded input. One final byte is reserved for the terminator.
+  if (value_length >= EXPR_TEXT_SIZE) {
+    snprintf(*translator->error, ERR_MSG_SIZE, "String literal is too long");
+    return false;
+  }
+
+  char text[EXPR_TEXT_SIZE] = {'\0'};
+  size_t length = 0;
+
+  for (size_t i = 0; i < value_length; ++i) {
+    char c = value[i];
+    if (c == '\\') {
+      // A surviving backslash must introduce a valid Lispico escape.
+      if (++i == value_length) {
+        snprintf(
+          *translator->error,
+          ERR_MSG_SIZE,
+          "Unterminated Lispico string escape in argument starting at byte %zu",
+          byte_offset
+        );
+        return false;
+      }
+
+      switch (value[i]) {
+        case '"': c = '"'; break;
+        case '\\': c = '\\'; break;
+        case 'n': c = '\n'; break;
+        case 'r': c = '\r'; break;
+        case 't': c = '\t'; break;
+        case '0': c = '\0'; break;
+        default:
+          snprintf(
+            *translator->error,
+            ERR_MSG_SIZE,
+            "Unknown Lispico string escape “\\%c” in argument starting at byte %zu",
+            value[i],
+            byte_offset
+          );
+          return false;
+      }
+    }
+    text[length++] = c;
+  }
+
+  // Keep the terminator separate from the logical string length.
+  text[length] = '\0';
+
+  if (!new_expression(translator, EXPR_STRING, index)) return false;
+  return store_text(
+    translator,
+    text,
+    length,
+    &translator->interpreter->storage.expressions[*index].data
+  );
+}
+
 // Translate an unquoted atom into a numeric literal or symbol reference.
 // `text` does not have to be NUL-terminated, so this also works for tokens
 // inside parenthesized expressions.
@@ -190,12 +259,12 @@ static bool translate_argument(
   // Confetti removes quotes from string values. Inspect the original lexeme
   // to distinguish `name` (a symbol reference) from `"name"` (a string).
   if (translator->source[argument->lexeme_offset] == '"') {
-    if (!new_expression(translator, EXPR_STRING, index)) return false;
-    return store_text(
+    return translate_string_value(
       translator,
       text,
       length,
-      &translator->interpreter->storage.expressions[*index].data
+      argument->lexeme_offset,
+      index
     );
   }
 
@@ -556,12 +625,12 @@ static bool parse_infix_primary(InfixParser *parser, uint32_t *index) {
         string[length++] = parser->text[i];
       }
 
-      if (!new_expression(parser->translator, EXPR_STRING, index)) return false;
-      if (!store_text(
+      if (!translate_string_value(
         parser->translator,
         string,
         length,
-        &parser->translator->interpreter->storage.expressions[*index].data
+        parser->byte_offset + token.start,
+        index
       )) return false;
 
       return next_infix_token(parser);

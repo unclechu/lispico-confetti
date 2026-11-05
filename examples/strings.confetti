@@ -1,0 +1,44 @@
+# Confetti removes the first escape layer, then Lispico decodes the second one.
+var "message" "hello\\nworld"
+assert ((str-size message) == 11)
+assert ((str-get "message" 5) == 10) # LF byte
+
+# Four source backslashes preserve a literal backslash followed by n.
+var "literal-escape" "hello\\\\nworld"
+assert ((str-size literal-escape) == 12)
+assert ((str-get "literal-escape" 5) == 92)
+assert ((str-get "literal-escape" 6) == 110)
+
+# Lispico strings retain their explicit lengths when escapes produce NUL bytes.
+var "binary" "A\\0B"
+assert ((str-size binary) == 3)
+assert ((str-len binary) == 1)
+assert ((str-get "binary" 1) == 0)
+assert ((str-get "binary" 2) == 66)
+
+# Every Lispico escape works after Confetti’s decoding.
+var "control" "A\\r\\tB"
+assert ((str-get "control" 1) == 13)
+assert ((str-get "control" 2) == 9)
+var "path" "C:\\\\Users\\\\Lispico"
+assert ((str-get "path" 2) == 92)
+var "quoted" "She said \"Hello\""
+assert (quoted == "She said \"Hello\"")
+
+# Triple quotes preserve literal newlines and follow the same escape rules.
+var "multiline" """First line
+Second line"""
+assert ((str-get "multiline" 10) == 10)
+var "triple-escape" """hello\\nworld"""
+assert ((str-get "triple-escape" 5) == 10)
+var "triple-binary" """A\\0B"""
+assert ((str-get "triple-binary" 1) == 0)
+
+# The same decoding applies to quoted arguments inside expressions.
+var "joined" (str "hello\\n" "world")
+assert ((str-get "joined" 5) == 10)
+var "embedded" (str "A\\0" "B")
+assert ((str-size embedded) == 3)
+assert ((str-get "embedded" 1) == 0)
+var "nested-literal" (str "A\\\\nB")
+assert ((str-get "nested-literal" 1) == 92)

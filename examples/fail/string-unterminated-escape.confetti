@@ -1,0 +1,1 @@
+var "bad" "\\" # Confetti leaves a trailing backslash for Lispico

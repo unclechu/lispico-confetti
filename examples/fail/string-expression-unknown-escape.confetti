@@ -1,0 +1,1 @@
+assert ("hello\\x" == "hello") # Invalid escape inside a parenthesized expression

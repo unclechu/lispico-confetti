@@ -1,0 +1,1 @@
+var "bad" "\\q" # Unknown Lispico escape after Confetti decoding

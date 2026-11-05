@@ -14,6 +14,29 @@ an explicit `do { … }` block creates a Lispico `(do)` sequence. Conditional
 See [examples](examples), which also serve as regression tests. Expected
 translation failures are in [examples/fail](examples/fail).
 
+## Relationship to Lispico
+
+Lispico Confetti is an alternative **frontend**, not a separate implementation
+of Lispico’s runtime. Confetti parses the source syntax, this project translates
+it into Lispico expressions, and the original Lispico evaluator executes them.
+Lispico’s standard library, value types, error behavior, variable and array
+semantics, allocation limits, and memory management (including manual garbage
+collection) therefore apply here too.
+
+**[Lispico](https://github.com/unclechu/lispico) is still in active
+development.** Its features and behavior continue to evolve. As this project
+updates its Lispico dependency, new standard-library functions and runtime
+capabilities can become available here as well. Some changes may require
+additional Confetti syntax translation or integration work, but the goal is to
+keep the underlying language behavior consistent.
+The dependency is pinned, so its available features reflect that particular
+Lispico revision until the pin is updated.
+
+For the complete and up-to-date feature set, native function documentation,
+memory management details, examples, and current limitations, consult
+**[Lispico’s README](https://github.com/unclechu/lispico#readme)**. This
+README focuses on how Lispico programs are expressed through Confetti syntax.
+
 ## Usage examples
 
 Locally make sure you have Lispico and Confetti Git submodules initialized:
@@ -30,6 +53,7 @@ Build and run the examples:
 ./lispico-confetti examples/blocks.confetti
 ./lispico-confetti examples/arrays.confetti
 ./lispico-confetti examples/infix.confetti
+./lispico-confetti examples/strings.confetti
 ./tests/run-examples.sh
 ```
 
@@ -76,6 +100,71 @@ Lispico:
 (println name)
 (println "name")
 ```
+
+### Implemented: String escapes and multiline strings
+
+Confetti first decodes its own escaping, which removes a backslash before the
+following character. Lispico Confetti then decodes any surviving backslash
+sequences using Lispico’s string literal rules. This second stage applies to
+ordinary quoted arguments, triple-quoted arguments, and quoted strings inside
+parenthesized expressions.
+
+For example, two backslashes in Confetti source preserve one backslash for
+Lispico’s decoder:
+
+Confetti:
+
+```confetti
+var "message" "hello\\nworld"
+var "binary" "A\\0B"
+var "literal" "hello\\\\nworld"
+```
+
+Lispico:
+
+```lisp
+(var "message" "hello\nworld")
+(var "binary" "A\0B")
+(var "literal" "hello\\nworld")
+```
+
+The supported second-stage escapes are:
+
+| Confetti source | Result |
+| --- | --- |
+| `\\n` | Newline (LF) |
+| `\\r` | Carriage return (CR) |
+| `\\t` | Tab |
+| `\\0` | NUL byte |
+| `\\\\` | Literal backslash |
+| `\\\\n` | Literal backslash followed by `n` |
+| `\\\\0` | Literal backslash followed by `0` |
+
+Confetti already handles ordinary escaped quotes such as `\"`. The second
+decoder also recognizes Lispico’s quote escape when it survives Confetti’s
+first pass. Unknown or incomplete surviving escapes are translation errors.
+
+**A single backslash is not enough to request a Lispico control character.**
+For example, Confetti turns `"\n"` into `"n"` before Lispico sees it. Likewise,
+`"\\q"` fails during Lispico decoding, while `"\\\\q"` represents a literal
+backslash followed by `q`.
+
+Triple-quoted strings preserve actual line breaks and then undergo the same
+second-stage decoding. Indentation inside the quotes is part of the value:
+
+```confetti
+var "message" """First line
+Second line"""
+assert ((str-get "message" 10) == 10)
+```
+
+Lispico strings have explicit byte lengths, so the decoded `\0` may appear in
+the middle of a string without truncating it. The final NUL terminator is
+stored separately from that logical length.
+
+Triple-quoted strings **inside parenthesized expressions** are not supported
+yet; ordinary directives already accept them. The expression-scanner
+limitations are tracked in the roadmap below.
 
 ### Implemented: An expression as the last argument
 
@@ -315,8 +404,16 @@ Lispico:
 - [x] Flatten consecutive arithmetic operators into variadic Lispico calls,
       retaining parentheses and native argument limits.
 - [ ] Translate conditional `if` / `else if` / `else` chains.
-- [ ] Define and test how Confetti’s string escaping maps to Lispico strings,
+- [x] Decode Lispico escape sequences after Confetti’s native escaping,
       including `\n`, `\0`, and embedded NUL bytes.
+- [ ] Support triple-quoted strings inside parenthesized expressions.
+- [ ] Align quoted strings inside parenthesized expressions with Confetti’s
+      rules for line continuations and escape validation.
+- [ ] Address Confetti’s expression scanner counting literal parentheses
+      inside quoted strings, even when escaped. First explore contributing
+      an optional quote-aware mode upstream; if necessary, maintain a
+      project-local patch applied to a build-local copy of Confetti’s source.
+      Consider preprocessing only if neither approach is practical.
 - [ ] Expand working examples and failure tests to cover the new syntax.
 - [ ] Port the original Lispico examples to `.confetti` equivalents.
 
