@@ -22,8 +22,6 @@ SOURCE_FILES=(
 # shellcheck disable=SC2206
 BUILD_CMD=(
   $CC -std=c23 -O2 -Wall -Wextra -Wpedantic $CFLAGS
-  # -Ilispico/src
-  # -Iconfetti
   "${SOURCE_FILES[@]}"
   -o "$OUTPUT_EXECUTABLE_NAME"
   $LIBS
