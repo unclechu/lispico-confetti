@@ -475,6 +475,48 @@ static bool append_infix_block_operands(
   return true;
 }
 
+// An operand containing several native arguments or an argument block is a
+// function call. A single argument without a block remains an atom, so
+// `x == foo` references `foo`, while `x == foo 42` evaluates `(foo 42)`.
+// Operators delimit adjacent operands.
+static bool translate_infix_argument_span(
+  ConfettiTranslator *translator,
+  const conf_directive *directive,
+  long first,
+  long end,
+  bool include_block,
+  uint32_t *index
+) {
+  if (end - first == 1 && !include_block)
+    return translate_argument(translator, conf_get_argument(directive, first), index);
+
+  if (!new_expression(translator, EXPR_LIST, index)) return false;
+  uint32_t previous_child = EXPR_NONE;
+  for (long i = first; i < end; ++i) {
+    uint32_t argument = EXPR_NONE;
+    if (!translate_argument(translator, conf_get_argument(directive, i), &argument))
+      return false;
+    append_child(translator->interpreter, *index, &previous_child, argument);
+  }
+
+  if (include_block) {
+    long block_count = conf_get_directive_count(directive);
+    for (long position = 0; position < block_count;) {
+      uint32_t argument = EXPR_NONE;
+      if (!translate_sequence_item(translator, directive, &position, &argument))
+        return false;
+      append_child(translator->interpreter, *index, &previous_child, argument);
+    }
+  }
+
+  uint32_t name = translator->interpreter->storage.expressions[*index].first_child;
+  if (translator->interpreter->storage.expressions[name].kind != EXPR_NAME) {
+    snprintf(*translator->error, ERR_MSG_SIZE, "Expected a function name at operand start");
+    return false;
+  }
+  return true;
+}
+
 // An operator continuation follows a `value` directive as another Confetti
 // subdirective. For example, `value {gc} == 0` is two native AST nodes.
 static bool append_operator_continuation(
@@ -505,9 +547,42 @@ static bool append_operator_continuation(
 
     uint32_t operand = EXPR_NONE;
     if (i < argument_count) {
-      if (!translate_argument(translator, conf_get_argument(directive, i), &operand))
+      long end = i + 1;
+      if (!explicit_value) {
+        const conf_argument *first = conf_get_argument(directive, i);
+        if (
+          first != NULL && first->value != NULL && is_operator(first->value) &&
+          is_bare_argument(translator, first, first->value)
+        ) {
+          snprintf(*translator->error, ERR_MSG_SIZE, "Infix operator is missing an operand");
+          return false;
+        }
+
+        // Stop at the next bare operator. Quoted operator spellings remain
+        // ordinary function arguments, as represented by Confetti’s AST.
+        while (end < argument_count) {
+          const conf_argument *next = conf_get_argument(directive, end);
+          if (
+            next != NULL && next->value != NULL && is_operator(next->value) &&
+            is_bare_argument(translator, next, next->value)
+          ) break;
+          ++end;
+        }
+      }
+      // A trailing block belongs to the final right-hand call and expands
+      // its native subdirectives into that call’s arguments. Never discard it.
+      bool include_block = end == argument_count && has_block;
+      if (include_block && explicit_value) {
+        snprintf(
+          *translator->error, ERR_MSG_SIZE,
+          "`value` expects one argument or one expression block"
+        );
         return false;
-      ++i;
+      }
+      if (!translate_infix_argument_span(
+        translator, directive, i, end, include_block, &operand
+      )) return false;
+      i = end;
     } else if (has_block) {
       // The final block may contribute multiple operands to a chainable
       // operator. An explicit `value` requires exactly one expression.

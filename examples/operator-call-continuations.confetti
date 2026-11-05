@@ -13,6 +13,18 @@ assert {div {value 7.5; value 2.0} == 3.0}
 assert {div 7.5 2.0 == 3.0}
 assert {str-size "hello" == 5}
 
+# A function call on the right also consumes its inline arguments up to the
+# next operator. Braces remain an equivalent, explicit way to group the call.
+var "signed" {arr {type i32 0}}
+assert {arr-get "signed" 0 == type i32 0}
+assert {arr-get "signed" 0 == {type i32 0}}
+assert {0 == type u32 0}
+assert {1 == type u32 {value 1}}
+assert {"++" == str "+" "+"}
+
+# Chainable operators use the next occurrence as the operand boundary.
+assert {value {1 + type u32 2 + 3} == 6}
+
 # Prefix operator calls after a block are still separate expressions.
 do {value 5}
 + {value 1; value 2}

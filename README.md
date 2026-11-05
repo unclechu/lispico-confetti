@@ -268,6 +268,24 @@ Both translate to `(assert (== (div 7.5 2.0) 3.0))`. In the second example,
 the `value` markers are needed because native Confetti subdirectives do not
 interpret `7.5 2.0` as two separate literal arguments.
 
+The right-hand operand can likewise be a function call with inline arguments:
+
+```confetti
+var "signed" {arr {type i32 0}}
+assert {arr-get "signed" 0 == type i32 0}
+assert {arr-get "signed" 0 == {type i32 0}}
+```
+
+Both assertions compare `(arr-get "signed" 0)` with `(type i32 0)`.
+Between infix operators, one native argument remains an atom, while multiple
+arguments form a function call. For example, `1 + type u32 2 + 3` translates
+to `(+ 1 (type u32 2) 3)`. Operators still cannot be mixed without braces,
+and `value` still introduces exactly one explicit operand. No new lexer or
+source-level grouping is needed: these are Confetti’s existing arguments.
+The final call may also use a native argument block, as in
+`assert {1 == type u32 {value 1}}`; quoted operator spellings remain ordinary
+arguments rather than splitting the call.
+
 One logical argument can span multiple directives, while a subsequent
 `value` starts a new argument:
 
@@ -492,6 +510,7 @@ for executable examples of both condition forms, sequences, and chains.
 - [x] Implement explicit `do { … }` sequences, including empty sequences.
 - [x] Implement `value` for passing through atoms or nested expression results.
 - [x] Translate homogeneous infix operators, including variadic arithmetic chains.
+- [x] Accept ungrouped right-hand function calls as infix operands.
 - [x] Support prefix operator calls as ordinary directives.
 - [x] Compose `value` with neighboring operator continuation directives.
 - [x] Disable Confetti’s parenthesized-expression extension and remove its custom parser.
