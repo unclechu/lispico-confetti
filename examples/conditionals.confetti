@@ -1,0 +1,112 @@
+# A bare condition and a single-expression branch need no extra keywords.
+var "result" 0
+if 1 {
+  override "result" 1
+}
+assert {result == 1}
+
+# `then` is optional for an inline condition.
+if 1 then {
+  override "result" 2
+}
+assert {result == 2}
+
+# An inline infix condition becomes an ordinary Lispico function call.
+if 5 > 2 {
+  override "result" 3
+} else {
+  override "result" 99
+}
+assert {result == 3}
+
+# `do` explicitly groups multiple expressions into the true branch.
+if 0 do {
+  override "result" 99
+  println "Unreachable"
+} else do {
+  override "result" 4
+  assert {result == 4}
+}
+assert {result == 4}
+
+if 1 then do {
+  override "result" 5
+  assert {result == 5}
+}
+
+# A blocked condition and its branch are neighboring Confetti AST directives.
+if {5 > 2} then {
+  override "result" 6
+} else {
+  override "result" 99
+}
+assert {result == 6}
+
+if {5 < 2} do {
+  override "result" 99
+} else do {
+  override "result" 7
+  assert {result == 7}
+}
+
+if {5 > 2} then do {
+  override "result" 8
+  assert {result == 8}
+}
+
+# An empty sequence is an explicit no-op branch.
+if 1 then do {}
+assert {result == 8}
+
+# A blocked condition can itself contain a native nested call and an
+# operator continuation; no custom expression parser is involved.
+if {value {str-size "hello"} == 5} then {
+  assert {result == 8}
+}
+
+# Both inline and blocked conditions can participate in `else if` chains.
+if 5 < 2 {
+  override "result" 99
+} else if 5 > 2 then {
+  override "result" 9
+} else {
+  override "result" 99
+}
+assert {result == 9}
+
+if {5 < 2} then {
+  override "result" 99
+} else if {5 > 2} then do {
+  override "result" 10
+  assert {result == 10}
+} else do {
+  override "result" 99
+}
+assert {result == 10}
+
+# An ordinary variable condition is a reference, not a function call.
+var "enabled" 1
+if enabled {
+  override "result" 11
+}
+
+# Chains work inside a `do` sequence and as one expression in a plain block.
+var "nested" do {
+  if 0 {
+    value 99
+  } else {
+    value result
+  }
+}
+assert {nested == 11}
+
+var "selected" {
+  if 0 {
+    value 99
+  } else if 1 {
+    value 12
+  } else {
+    value 99
+  }
+}
+assert {selected == 12}

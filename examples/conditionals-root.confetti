@@ -1,0 +1,9 @@
+# The whole conditional chain is the first expression in the program.
+# Its result must remain at the evaluator’s entry expression index.
+if {1 == 1} then {
+  value 42
+} else if {1 > 2} then {
+  value 99
+} else {
+  value 0
+}

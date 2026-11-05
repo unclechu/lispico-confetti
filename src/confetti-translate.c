@@ -430,6 +430,15 @@ static bool translate_single_block(
   uint32_t *index
 );
 
+// Some expressions, notably `if` with an adjacent `then` or `else`, span
+// multiple sibling Confetti directives. Advance `position` past all of them.
+static bool translate_sequence_item(
+  ConfettiTranslator *translator,
+  const conf_directive *container,
+  long *position,
+  uint32_t *index
+);
+
 // An operator continuation follows a `value` directive as another Confetti
 // subdirective. For example, `value {gc} == 0` is two native AST nodes.
 static bool append_operator_continuation(
@@ -477,11 +486,20 @@ static bool translate_single_block(
     snprintf(*translator->error, ERR_MSG_SIZE, "Empty expression block; use `do {}`");
     return false;
   }
-  if (count == 1)
-    return translate_directive(translator, conf_get_directive(directive, 0), index);
+  if (count == 1) {
+    long position = 0;
+    return translate_sequence_item(translator, directive, &position, index);
+  }
 
   const conf_directive *first = conf_get_directive(directive, 0);
   if (!is_bare_argument(translator, conf_get_argument(first, 0), "value")) {
+    // An `if` clause may consume adjacent `then` / `else` directives, but
+    // it still represents just one expression within this plain block.
+    if (is_bare_argument(translator, conf_get_argument(first, 0), "if")) {
+      long position = 0;
+      if (!translate_sequence_item(translator, directive, &position, index)) return false;
+      if (position == count) return true;
+    }
     snprintf(
       *translator->error, ERR_MSG_SIZE,
       "Block contains %ld directives; use `do { … }` for a sequence, or `value` for an operator continuation",
@@ -531,9 +549,9 @@ static bool translate_sequence_block(
   append_child(translator->interpreter, *index, &previous, name);
 
   long count = conf_get_directive_count(directive);
-  for (long i = 0; i < count; ++i) {
+  for (long i = 0; i < count;) {
     uint32_t child = EXPR_NONE;
-    if (!translate_directive(translator, conf_get_directive(directive, i), &child))
+    if (!translate_sequence_item(translator, directive, &i, &child))
       return false;
     append_child(translator->interpreter, *index, &previous, child);
   }
@@ -600,6 +618,253 @@ static bool translate_infix_directive(
   }
 
   *index = call.expression;
+  return true;
+}
+
+// An inline condition, such as `if 5 > 2 { … }`, uses Confetti’s ordinary
+// arguments. Only one infix operator may occur in a condition.
+static bool translate_condition_arguments(
+  ConfettiTranslator *translator,
+  const conf_directive *directive,
+  long first,
+  long end,
+  uint32_t *index
+) {
+  long count = end - first;
+  if (count == 1)
+    return translate_argument(translator, conf_get_argument(directive, first), index);
+
+  if (count < 3 || count % 2 == 0) {
+    snprintf(
+      *translator->error, ERR_MSG_SIZE,
+      "`if` expects one condition or a homogeneous infix condition; use { … } for a call"
+    );
+    return false;
+  }
+
+  const conf_argument *operator_arg = conf_get_argument(directive, first + 1);
+  if (
+    operator_arg == NULL || operator_arg->value == NULL ||
+    !is_operator(operator_arg->value) ||
+    !is_bare_argument(translator, operator_arg, operator_arg->value)
+  ) {
+    snprintf(
+      *translator->error, ERR_MSG_SIZE,
+      "Unsupported condition; use a single infix operator or { … } for a call"
+    );
+    return false;
+  }
+
+  InfixCall call;
+  if (!start_infix_call(&call, translator, operator_arg->value)) return false;
+
+  for (long i = first; i < end; i += 2) {
+    if (i != first && !check_infix_operator(
+      translator, conf_get_argument(directive, i - 1), call.operator_name
+    )) return false;
+
+    uint32_t operand = EXPR_NONE;
+    if (!translate_argument(translator, conf_get_argument(directive, i), &operand))
+      return false;
+    if (!append_infix_operand(&call, operand)) return false;
+  }
+
+  *index = call.expression;
+  return true;
+}
+
+typedef struct {
+  uint32_t expression;
+  uint32_t previous_child;
+} ConditionalCall;
+
+static bool start_conditional_call(
+  ConfettiTranslator *translator,
+  ConditionalCall *call
+) {
+  call->previous_child = EXPR_NONE;
+  if (!new_expression(translator, EXPR_LIST, &call->expression)) return false;
+
+  uint32_t name = EXPR_NONE;
+  if (!new_name(translator, "if", &name)) return false;
+  append_child(translator->interpreter, call->expression, &call->previous_child, name);
+  return true;
+}
+
+static bool translate_conditional_branch(
+  ConfettiTranslator *translator,
+  const conf_directive *directive,
+  bool sequence,
+  uint32_t *index
+) {
+  if (!has_directive_block(translator, directive)) {
+    snprintf(*translator->error, ERR_MSG_SIZE, "Conditional branch requires a { … } block");
+    return false;
+  }
+  if (sequence) return translate_sequence_block(translator, directive, index);
+  return translate_single_block(translator, directive, index);
+}
+
+// Confetti gives each directive only one trailing block. Thus
+// `if condition then {branch}` is one directive, but
+// `if {condition} then {branch}` is an `if` node followed by `then`.
+static bool translate_if_clause(
+  ConfettiTranslator *translator,
+  const conf_directive *container,
+  long *position,
+  long condition_start,
+  uint32_t *condition,
+  uint32_t *branch
+) {
+  const conf_directive *clause = conf_get_directive(container, *position);
+  long argc = conf_get_argument_count(clause);
+  bool has_block = has_directive_block(translator, clause);
+
+  if (argc == condition_start && has_block) {
+    // The first block is the condition; the next sibling supplies the branch.
+    if (!translate_single_block(translator, clause, condition)) return false;
+    ++*position;
+    if (*position >= conf_get_directive_count(container)) {
+      snprintf(
+        *translator->error, ERR_MSG_SIZE,
+        "A blocked `if` condition must be followed by `then { … }` or `do { … }`"
+      );
+      return false;
+    }
+
+    const conf_directive *next = conf_get_directive(container, *position);
+    const conf_argument *first = conf_get_argument(next, 0);
+    long next_argc = conf_get_argument_count(next);
+    bool is_then = is_bare_argument(translator, first, "then");
+    bool is_do = is_bare_argument(translator, first, "do");
+    bool sequence = is_do;
+    if (
+      (!is_then && !is_do) ||
+      !(next_argc == 1 || (
+        is_then && next_argc == 2 &&
+        is_bare_argument(translator, conf_get_argument(next, 1), "do")
+      ))
+    ) {
+      snprintf(
+        *translator->error, ERR_MSG_SIZE,
+        "Expected `then { … }`, `do { … }`, or `then do { … }` after blocked condition"
+      );
+      return false;
+    }
+    if (next_argc == 2) sequence = true;
+    if (!translate_conditional_branch(translator, next, sequence, branch)) return false;
+    ++*position;
+    return true;
+  }
+
+  if (!has_block) {
+    snprintf(*translator->error, ERR_MSG_SIZE, "`if` requires a branch block");
+    return false;
+  }
+
+  long condition_end = argc;
+  bool sequence = false;
+  if (condition_end > condition_start && is_bare_argument(
+    translator, conf_get_argument(clause, condition_end - 1), "do"
+  )) {
+    sequence = true;
+    --condition_end;
+  }
+  if (condition_end > condition_start && is_bare_argument(
+    translator, conf_get_argument(clause, condition_end - 1), "then"
+  )) --condition_end;
+
+  if (condition_end == condition_start) {
+    snprintf(*translator->error, ERR_MSG_SIZE, "`if` requires a condition");
+    return false;
+  }
+  if (!translate_condition_arguments(
+    translator, clause, condition_start, condition_end, condition
+  )) return false;
+  if (!translate_conditional_branch(translator, clause, sequence, branch)) return false;
+  ++*position;
+  return true;
+}
+
+// Consume the full `if` / `else if` / `else` chain from sibling directives.
+// Each `else if` becomes the false branch of the preceding Lispico `(if)`.
+static bool translate_if_chain(
+  ConfettiTranslator *translator,
+  const conf_directive *container,
+  long *position,
+  uint32_t *index
+) {
+  ConditionalCall current;
+  // Reserve the outermost expression before its children so root index 0
+  // always points at the complete conditional call.
+  if (!start_conditional_call(translator, &current)) return false;
+  *index = current.expression;
+
+  uint32_t condition = EXPR_NONE;
+  uint32_t branch = EXPR_NONE;
+  if (!translate_if_clause(
+    translator, container, position, 1, &condition, &branch
+  )) return false;
+  append_child(translator->interpreter, current.expression, &current.previous_child, condition);
+  append_child(translator->interpreter, current.expression, &current.previous_child, branch);
+
+  long sibling_count = conf_get_directive_count(container);
+  while (*position < sibling_count) {
+    const conf_directive *next = conf_get_directive(container, *position);
+    if (!is_bare_argument(translator, conf_get_argument(next, 0), "else")) break;
+
+    long argc = conf_get_argument_count(next);
+    if (argc > 1 && is_bare_argument(translator, conf_get_argument(next, 1), "if")) {
+      ConditionalCall nested;
+      if (!start_conditional_call(translator, &nested)) return false;
+      append_child(
+        translator->interpreter, current.expression, &current.previous_child, nested.expression
+      );
+      current = nested;
+      if (!translate_if_clause(
+        translator, container, position, 2, &condition, &branch
+      )) return false;
+      append_child(translator->interpreter, current.expression, &current.previous_child, condition);
+      append_child(translator->interpreter, current.expression, &current.previous_child, branch);
+      continue;
+    }
+
+    bool sequence = argc == 2 && is_bare_argument(
+      translator, conf_get_argument(next, 1), "do"
+    );
+    if (argc != 1 && !sequence) {
+      snprintf(*translator->error, ERR_MSG_SIZE, "`else` expects a block or `do { … }`");
+      return false;
+    }
+    if (!translate_conditional_branch(translator, next, sequence, &branch)) return false;
+    append_child(translator->interpreter, current.expression, &current.previous_child, branch);
+    ++*position;
+    break;
+  }
+
+  return true;
+}
+
+static bool translate_sequence_item(
+  ConfettiTranslator *translator,
+  const conf_directive *container,
+  long *position,
+  uint32_t *index
+) {
+  const conf_directive *directive = conf_get_directive(container, *position);
+  const conf_argument *first = conf_get_argument(directive, 0);
+  if (is_bare_argument(translator, first, "if"))
+    return translate_if_chain(translator, container, position, index);
+  if (
+    is_bare_argument(translator, first, "else") ||
+    is_bare_argument(translator, first, "then")
+  ) {
+    snprintf(*translator->error, ERR_MSG_SIZE, "Unexpected `else` or `then` without `if`");
+    return false;
+  }
+
+  if (!translate_directive(translator, directive, index)) return false;
+  ++*position;
   return true;
 }
 
@@ -713,9 +978,9 @@ bool parse_confetti_source(
   const conf_directive *root = conf_get_root(unit);
   long count = conf_get_directive_count(root);
   uint32_t previous = EXPR_NONE;
-  for (long i = 0; i < count; ++i) {
+  for (long i = 0; i < count;) {
     uint32_t expression = EXPR_NONE;
-    if (!translate_directive(&translator, conf_get_directive(root, i), &expression))
+    if (!translate_sequence_item(&translator, root, &i, &expression))
       goto fail;
     if (previous != EXPR_NONE)
       interpreter->storage.expressions[previous].next = expression;

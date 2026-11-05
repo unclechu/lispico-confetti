@@ -281,28 +281,13 @@ assert {value {str-get "message" 10} == 10}
 Lispico strings store explicit byte lengths, so an embedded NUL does not
 truncate the value. A final terminator is stored separately.
 
-### Conditionals: current support and planned chaining
+### Conditionals
 
-The existing Lispico `if` function works for simple conditions and one
-expression-valued branch:
-
-```confetti
-if 1 {
-  println "true"
-}
-```
-
-```lisp
-(if 1 (println "true"))
-```
-
-`else if` / `else` chains remain **planned**. The intended design will use
-neighboring Confetti directives in the same way as its shell-command examples;
-the exact conditional form will be decided before implementation. For example,
-one possible form is:
+The translator supports `if`, `else if`, and `else`. Each branch is evaluated
+only when selected, preserving Lispico’s ordinary lazy `if` behavior.
+Conditions may be single values or infix comparisons:
 
 ```confetti
-# Planned, not yet accepted by the translator
 if 5 > 2 {
   println "bigger"
 } else if 5 < 2 {
@@ -312,6 +297,8 @@ if 5 > 2 {
 }
 ```
 
+Equivalent Lispico:
+
 ```lisp
 (if (> 5 2)
   (println "bigger")
@@ -320,10 +307,73 @@ if 5 > 2 {
     (println "equal")))
 ```
 
-Confetti permits a single trailing block per directive, so the original
-proposal `if {condition} {branch}` would not produce two independently nested
-operands in Confetti’s AST. Any eventual design will retain native AST-only
-parsing. A multi-expression branch must use explicit `do { … }`.
+`then` is optional when the condition fits in the directive’s argument list:
+
+```confetti
+if enabled {
+  println "Enabled"
+}
+if enabled then {
+  println "Enabled"
+}
+```
+
+However, **Confetti permits only one trailing block per directive**.
+If the condition itself needs a block, the branch must be an adjacent
+`then` or `do` directive:
+
+```confetti
+if {5 > 2} then {
+  println "bigger"
+} else if {5 < 2} then {
+  println "smaller"
+} else {
+  println "equal"
+}
+```
+
+This is still entirely native Confetti AST: `if {5 > 2}` contains the condition
+block, and the next sibling `then { … }` supplies its branch. No embedded
+expression strings are re-parsed. Writing `if {condition} {branch}` directly
+is invalid because the second block lacks its own directive.
+
+A regular branch block must contain **exactly one expression**. Use `do` for
+zero or multiple expressions; optionally combine it with `then`:
+
+```confetti
+if {enabled} then {
+  println "Enabled"
+} else do {
+  println "Disabled"
+  println "Try enabling it"
+}
+
+if enabled then do {
+  println "First"
+  println "Second"
+}
+
+if enabled do {}
+```
+
+`do` wraps its contents in Lispico `(do …)`. For example, the first conditional
+above corresponds to:
+
+```lisp
+(if (enabled)
+  (println "Enabled")
+  (do
+    (println "Disabled")
+    (println "Try enabling it")))
+```
+
+To read the value of the variable `enabled`, use `if enabled` rather than
+`if {enabled}`: the braces make `{enabled}` a zero-argument function call,
+equivalent to Lispico `(enabled)`. Inside a condition block, use
+`{value enabled}` if a variable reference must be explicitly grouped.
+
+See `examples/conditionals.confetti` and `examples/conditionals-root.confetti`
+for executable examples of both condition forms, sequences, and chains.
 
 ## Implementation roadmap
 
@@ -337,7 +387,7 @@ parsing. A multi-expression branch must use explicit `do { … }`.
 - [x] Compose `value` with neighboring operator continuation directives.
 - [x] Disable Confetti’s parenthesized-expression extension and remove its custom parser.
 - [x] Reject mixed operators, invalid continuations, and invalid plain blocks.
-- [ ] Design and translate `if` / `else if` / `else` chains using native directives.
+- [x] Translate `if` / `else if` / `else` chains using only native directives.
 - [ ] Expand failure coverage and port more original Lispico examples to `.confetti`.
 
 ## Development environment
