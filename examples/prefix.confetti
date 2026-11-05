@@ -1,0 +1,11 @@
+# Prefix operator calls remain available alongside the preferred infix style.
+var "two" {+ 1 2}
+assert {two == 3}
+
+# A prefix operator may also receive several arguments.
+var "six" {+ 1 2 3}
+assert {six == 6}
+
+# Prefix operators work as ordinary function names with nested final arguments.
+var "multiplied" {* 2 {+ 3 4}}
+assert {multiplied == 14}

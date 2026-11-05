@@ -8,7 +8,7 @@ var "second" {
 }
 
 assert {
-  == second 20
+  second == 20
 }
 
 arr-set "numbers" 1 42
@@ -18,5 +18,5 @@ var "updated" {
 }
 
 assert {
-  == updated 42
+  updated == 42
 }

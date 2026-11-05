@@ -1,0 +1,2 @@
+# Comparisons are binary, even though arithmetic operators can be chained.
+assert {1 < 2 < 3}

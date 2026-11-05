@@ -1,1 +1,1 @@
-var "bad" (1 +)
+var "bad" {1 +}

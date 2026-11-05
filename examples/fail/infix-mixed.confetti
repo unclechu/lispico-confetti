@@ -1,0 +1,2 @@
+# Operators in one native directive must be the same; nesting is explicit.
+var "bad" {1 + 2 * 3}

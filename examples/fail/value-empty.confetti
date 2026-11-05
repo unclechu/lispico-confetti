@@ -1,0 +1,1 @@
+var "bad" {value} # Missing operand for the `value` form

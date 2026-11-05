@@ -1,0 +1,2 @@
+# Adjacent operator directives cannot mix operations without nested blocks.
+assert {value {gc} + 1 * 2}

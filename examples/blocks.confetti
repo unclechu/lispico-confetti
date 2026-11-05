@@ -1,12 +1,12 @@
 # An explicit `do` block evaluates directives in order and returns the final result.
 var "answer" do {
   var "first" 10
-  + first 5
+  first + 5
 }
 
 # A plain block supplies one expression without introducing a `(do)` sequence.
 assert {
-  == answer 15
+  answer == 15
 }
 
 # A trailing `do` marker can also introduce a sequence in an `(if)` branch.
@@ -15,7 +15,7 @@ if 1 do {
   set "branch-value" 2
 }
 assert {
-  == branch-value 2
+  branch-value == 2
 }
 
 # An explicit `do` remains a sequence even when it contains one expression.
@@ -23,7 +23,7 @@ var "nested-depth" do {
   depth
 }
 assert {
-  == nested-depth 1
+  nested-depth == 1
 }
 
 # An empty block is valid when a `do` sequence is explicitly requested.
@@ -38,7 +38,7 @@ do {
   set "plain-leave" 1
 }
 assert {
-  == plain-leave 0
+  plain-leave == 0
 }
 
 # An explicit inner `do` gives `(leave)` its own sequence to exit.
@@ -50,7 +50,7 @@ do {
   set "explicit-leave" 1
 }
 assert {
-  == explicit-leave 1
+  explicit-leave == 1
 }
 
 # A plain block preserves its surrounding sequence depth.
@@ -59,10 +59,17 @@ do {
     depth
   }
   assert {
-    == direct-depth 1
+    direct-depth == 1
   }
   assert {
-    == answer 15
+    answer == 15
   }
   println "Block evaluation works"
 }
+
+# `value` passes a variable through without calling it as a function.
+var "last-result" do {
+  println "Returning a variable’s value"
+  value answer
+}
+assert {last-result == 15}

@@ -1,0 +1,2 @@
+# A `value` construct must pass exactly one operand through.
+do {value 1 2}
