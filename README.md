@@ -222,17 +222,22 @@ var "six" {+ 1 2 3}
 ### `value` and neighboring operator directives
 
 Confetti allows a new directive immediately after another directive’s closing
-brace. The translator can therefore combine a `value` directive with its
-following operator directives inside the same native block:
+brace. The translator can therefore combine a `value` directive or an ordinary
+function call with a trailing argument block with the following operator
+directives inside the same native block:
 
 ```confetti
 var "numbers" {arr 10 20 30}
 assert {value {arr-get "numbers" 1} == 20}
+assert {type-of {3 - 2} == u32}
+assert {value {2 + 3} == value 5}
 ```
 
 ```lisp
 (var "numbers" (arr 10 20 30))
 (assert (== (arr-get "numbers" 1) 20))
+(assert (== (type-of (- 3 2)) u32))
+(assert (== (+ 2 3) 5))
 ```
 
 Confetti provides neighboring subdirectives, not an opaque expression string:
@@ -245,9 +250,23 @@ assert
 ```
 
 Here `value {arr-get "numbers" 1}` provides the left operand, and `== 20`
-continues the expression. Subsequent operator continuations must use the
-same operator. This is an interpretation of Confetti’s native AST; no extra
-lexical scanning is involved.
+continues the expression. The outer `value` is unnecessary when the left side
+is already a function call with an argument block, and `value` may optionally
+introduce the right operand as well. Subsequent operator continuations must
+use the same operator. This is an interpretation of Confetti’s native AST; no
+extra lexical scanning is involved.
+
+A named function call with inline arguments can also precede a comparison
+within one directive:
+
+```confetti
+assert {div 7.5 2.0 == 3.0}
+assert {div {value 7.5; value 2.0} == 3.0}
+```
+
+Both translate to `(assert (== (div 7.5 2.0) 3.0))`. In the second example,
+the `value` markers are needed because native Confetti subdirectives do not
+interpret `7.5 2.0` as two separate literal arguments.
 
 One logical argument can span multiple directives, while a subsequent
 `value` starts a new argument:

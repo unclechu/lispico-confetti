@@ -1,0 +1,22 @@
+# An explicit `value` can also introduce the right operand of an infix call.
+assert {value {2 + 3} == 5}
+assert {value {2 + 3} == value 5}
+assert {1 == value 1}
+assert {value {1 + value 2} == 3}
+
+# A function call with a native argument block needs no extra `value` wrapper.
+assert {type-of {3 - 2} == u32}
+assert {value {type-of {3 - 2}} == u32}
+assert {div {value 7.5; value 2.0} == 3.0}
+
+# A regular directive may contain a function call followed by an operator.
+assert {div 7.5 2.0 == 3.0}
+assert {str-size "hello" == 5}
+
+# Prefix operator calls after a block are still separate expressions.
+do {value 5}
++ {value 1; value 2}
+assert {value {last-val} == 3}
+do {value 5}
+== {value 1; value 1}
+assert {value {last-val} == 1}

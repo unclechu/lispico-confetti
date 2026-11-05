@@ -480,31 +480,45 @@ static bool append_infix_block_operands(
 static bool append_operator_continuation(
   ConfettiTranslator *translator,
   const conf_directive *directive,
-  InfixCall *call
+  InfixCall *call,
+  long first_argument
 ) {
   long argument_count = conf_get_argument_count(directive);
   bool has_block = has_directive_block(translator, directive);
-  if (argument_count + (has_block ? 1 : 0) < 2) {
+  if (argument_count - first_argument + (has_block ? 1 : 0) < 2) {
     snprintf(*translator->error, ERR_MSG_SIZE, "Operator continuation needs an operand");
     return false;
   }
-  if (((size_t)argument_count + (has_block ? 1u : 0u)) % 2 != 0) {
-    snprintf(*translator->error, ERR_MSG_SIZE, "Operator continuation is missing an operand");
-    return false;
-  }
 
-  for (long i = 0; i < argument_count; i += 2) {
+  for (long i = first_argument; i < argument_count;) {
     const conf_argument *operator_arg = conf_get_argument(directive, i);
     if (!check_infix_operator(translator, operator_arg, call->operator_name)) return false;
+    ++i;
+
+    // An explicit `value` before an operand is optional. This is useful for
+    // continuations such as `value {gc} == value 0`, where Confetti puts the
+    // operator and its right-hand operand in one native directive.
+    bool explicit_value = i < argument_count && is_bare_argument(
+      translator, conf_get_argument(directive, i), "value"
+    ) && (i + 1 < argument_count || has_block);
+    if (explicit_value) ++i;
 
     uint32_t operand = EXPR_NONE;
-    if (i + 1 < argument_count) {
-      if (!translate_argument(translator, conf_get_argument(directive, i + 1), &operand))
+    if (i < argument_count) {
+      if (!translate_argument(translator, conf_get_argument(directive, i), &operand))
         return false;
-    } else {
+      ++i;
+    } else if (has_block) {
       // The final block may contribute multiple operands to a chainable
-      // operator, just like a regular function argument block.
-      return append_infix_block_operands(call, directive);
+      // operator. An explicit `value` requires exactly one expression.
+      if (explicit_value) {
+        if (!translate_single_block(translator, directive, &operand)) return false;
+      } else {
+        return append_infix_block_operands(call, directive);
+      }
+    } else {
+      snprintf(*translator->error, ERR_MSG_SIZE, "Operator continuation is missing an operand");
+      return false;
     }
     if (!append_infix_operand(call, operand)) return false;
   }
@@ -528,7 +542,12 @@ static bool begins_operator_continuation(
 
   long count = conf_get_argument_count(directive);
   if (has_directive_block(translator, directive)) count++;
-  return count == 1 || (count >= 2 && count % 2 == 0);
+  return (
+    count == 1 || (count >= 2 && count % 2 == 0) ||
+    (count >= 3 && is_bare_argument(
+      translator, conf_get_argument(directive, 1), "value"
+    ))
+  );
 }
 
 // Contexts such as `if` branches and `value { … }` require exactly one
@@ -605,10 +624,9 @@ static bool translate_infix_directive(
   const char *operator_name,
   uint32_t *index
 ) {
-  long argument_count = conf_get_argument_count(directive);
-  bool has_block = has_directive_block(translator, directive);
-  long total = argument_count + (has_block ? 1 : 0);
-  if (total < 3 || total % 2 == 0) {
+  long total = conf_get_argument_count(directive) +
+    (has_directive_block(translator, directive) ? 1 : 0);
+  if (total < 3) {
     snprintf(*translator->error, ERR_MSG_SIZE, "Infix operator is missing an operand");
     return false;
   }
@@ -620,22 +638,45 @@ static bool translate_infix_directive(
   if (!translate_argument(translator, conf_get_argument(directive, 0), &first)) return false;
   if (!append_infix_operand(&call, first)) return false;
 
-  for (long i = 1; i < total; i += 2) {
-    if (!check_infix_operator(
-      translator, conf_get_argument(directive, i), operator_name
-    )) return false;
+  if (!append_operator_continuation(translator, directive, &call, 1)) return false;
 
-    uint32_t operand = EXPR_NONE;
-    if (i + 1 < argument_count) {
-      if (!translate_argument(translator, conf_get_argument(directive, i + 1), &operand))
-        return false;
-    } else {
-      // A final block supplies the remaining arguments to the infix call.
-      if (!append_infix_block_operands(&call, directive)) return false;
-      continue;
-    }
-    if (!append_infix_operand(&call, operand)) return false;
+  *index = call.expression;
+  return true;
+}
+
+// A regular function call may precede an infix operator within one native
+// Confetti directive: `div 7.5 2.0 == 3.0` becomes `(== (div 7.5 2.0) 3.0)`.
+// The operator separates already-parsed Confetti arguments, so no additional
+// source scanning or expression parser is necessary.
+static bool translate_call_with_operator_suffix(
+  ConfettiTranslator *translator,
+  const conf_directive *directive,
+  long operator_position,
+  const char *operator_name,
+  uint32_t *index
+) {
+  InfixCall call;
+  if (!start_infix_call(&call, translator, operator_name)) return false;
+
+  uint32_t function = EXPR_NONE;
+  if (!new_expression(translator, EXPR_LIST, &function)) return false;
+  uint32_t previous = EXPR_NONE;
+  for (long i = 0; i < operator_position; ++i) {
+    uint32_t argument = EXPR_NONE;
+    if (!translate_argument(translator, conf_get_argument(directive, i), &argument))
+      return false;
+    append_child(translator->interpreter, function, &previous, argument);
   }
+
+  uint32_t function_name = translator->interpreter->storage.expressions[function].first_child;
+  if (translator->interpreter->storage.expressions[function_name].kind != EXPR_NAME) {
+    snprintf(*translator->error, ERR_MSG_SIZE, "Expected a function name at directive start");
+    return false;
+  }
+  if (!append_infix_operand(&call, function)) return false;
+  if (!append_operator_continuation(
+    translator, directive, &call, operator_position
+  )) return false;
 
   *index = call.expression;
   return true;
@@ -877,14 +918,20 @@ static bool translate_sequence_item(
     return translate_if_chain(translator, container, position, index);
 
   long count = conf_get_directive_count(container);
+  const conf_directive *next = *position + 1 < count
+    ? conf_get_directive(container, *position + 1) : NULL;
+  const conf_argument *next_operator = next == NULL ? NULL : conf_get_argument(next, 0);
+  bool next_has_value_marker = next != NULL && is_bare_argument(
+    translator, conf_get_argument(next, 1), "value"
+  ) && (conf_get_argument_count(next) > 2 || has_directive_block(translator, next));
   if (
-    is_bare_argument(translator, first, "value") &&
-    *position + 1 < count &&
-    begins_operator_continuation(
-      translator, conf_get_directive(container, *position + 1)
-    )
+    (is_bare_argument(translator, first, "value") ||
+     (has_directive_block(translator, directive) && next_operator != NULL &&
+      next_operator->value != NULL &&
+      conf_get_argument_count(next) >= 2 &&
+      (!is_chainable_operator(next_operator->value) || next_has_value_marker))) &&
+    next != NULL && begins_operator_continuation(translator, next)
   ) {
-    const conf_directive *next = conf_get_directive(container, *position + 1);
     const char *operator_name = conf_get_argument(next, 0)->value;
     InfixCall call;
     // Allocate the outer expression first to preserve Lispico’s entry index.
@@ -901,7 +948,7 @@ static bool translate_sequence_item(
       )
     ) {
       if (!append_operator_continuation(
-        translator, conf_get_directive(container, *position), &call
+        translator, conf_get_directive(container, *position), &call, 0
       )) return false;
       ++*position;
     }
@@ -950,6 +997,22 @@ static bool translate_directive(
       is_operator(second->value) &&
       is_bare_argument(translator, second, second->value)
     ) return translate_infix_directive(translator, directive, second->value, index);
+  }
+
+  // A named call followed by an operator in the same directive uses the
+  // completed call as the operator’s left operand. Keep prefix operators
+  // themselves separate: mixed operators still require explicit grouping.
+  if (first != NULL && first->value != NULL && !is_operator(first->value)) {
+    for (long i = 2; i < count; ++i) {
+      const conf_argument *argument = conf_get_argument(directive, i);
+      if (
+        argument != NULL && argument->value != NULL &&
+        is_operator(argument->value) &&
+        is_bare_argument(translator, argument, argument->value)
+      ) return translate_call_with_operator_suffix(
+        translator, directive, i, argument->value, index
+      );
+    }
   }
 
   // Ordinary Confetti directives call the named Lispico function. Prefix
