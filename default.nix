@@ -21,6 +21,10 @@ let
     packages = [
       pkgs.gcc
       pkgs.shellcheck
+
+      # For testing scripts
+      pkgs.time # For memory footprint measurements and evaluation time
+      pkgs.gawk
     ];
   };
 
