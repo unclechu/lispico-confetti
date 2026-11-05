@@ -28,4 +28,4 @@ jobs:
       - name: Measure time and memory usage for all examples
         run: nix-shell --run './tests/measure-examples.sh'
         env:
-          LISPICO_EXECUTABLE: ./result/bin/lispico
+          LISPICO_EXECUTABLE: ./result/bin/lispico-confetti
