@@ -4,7 +4,7 @@ var "answer" do {
   first + 5
 }
 
-# A plain block supplies one expression without introducing a `(do)` sequence.
+# This ordinary argument block happens to supply exactly one expression.
 assert {
   answer == 15
 }

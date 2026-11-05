@@ -1,0 +1,2 @@
+# The `value` special form still requires exactly one expression in its block.
+var "bad" {value {value 1; value 2}}

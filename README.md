@@ -63,18 +63,21 @@ nix-build -A lispico-confetti --arg useLocalSubmodules true
 Confetti supplies the complete structural AST. Lispico Confetti interprets
 directives and their arguments as Lispico expressions:
 
-| Confetti          | Lispico             | Meaning                                  |
-| ---               | ---                 | ---                                      |
-| `message`         | `(message)`         | Call a function without arguments        |
-| `value message`   | `message`           | Use a symbol’s value                     |
-| `value 123`       | `123`               | Use a literal value                      |
-| `println message` | `(println message)` | Call a function with an argument         |
-| `var "x" {gc}`    | `(var "x" (gc))`    | A block supplies a nested function call  |
-| `value {gc}`      | `(gc)`              | Pass the result of a nested call through |
-| `1 + 2`           | `(+ 1 2)`           | Infix operator directive                 |
-| `+ 1 2`           | `(+ 1 2)`           | Ordinary prefix operator directive       |
-| `1 + 2 + 3`       | `(+ 1 2 3)`         | Chain the same arithmetic operator       |
-| `do { … }`        | `(do …)`            | Explicit sequence                        |
+| Confetti                        | Lispico              | Meaning                                       |
+| ---                             | ---                  | ---                                           |
+| `message`                       | `(message)`          | Call a function without arguments             |
+| `value message`                 | `message`            | Use a symbol’s value                          |
+| `value 123`                     | `123`                | Use a literal value                           |
+| `println message`               | `(println message)`  | Call a function with an argument              |
+| `var "x" {gc}`                  | `(var "x" (gc))`     | A block supplies a call argument              |
+| `str {value "a"; value "b"}`    | `(str "a" "b")`      | Block subdirectives supply separate arguments |
+| `str {}`                        | `(str)`              | Empty block supplies no arguments             |
+| `str do {value "a"; value "b"}` | `(str (do "a" "b"))` | Explicit sequence is one argument             |
+| `value {gc}`                    | `(gc)`               | Pass the result of a nested call through      |
+| `1 + 2`                         | `(+ 1 2)`            | Infix operator directive                      |
+| `+ 1 2`                         | `(+ 1 2)`            | Ordinary prefix operator directive            |
+| `1 + 2 + 3`                     | `(+ 1 2 3)`          | Chain the same arithmetic operator            |
+| `do { … }`                      | `(do …)`             | Explicit sequence                             |
 
 Quoted arguments represent string literals, while bare names represent
 symbol references. Numeric arguments use Lispico’s existing numeric parser.
@@ -92,10 +95,39 @@ println "name"
 (println "name")
 ```
 
-### Native blocks and infix operators
+### Native argument blocks and infix operators
 
-A plain block supplies **one expression**. Its subdirectives are not
-implicitly grouped into a `(do)`. The preferred operator syntax is infix:
+An ordinary block supplies **zero or more arguments** to the enclosing
+function, one for each logical expression inside it. The block is not
+implicitly grouped into a `(do)`. For example:
+
+```confetti
+var "joined" {str {str {value "Hello"}; str {value " world"}}}
+assert {joined == "Hello world"}
+
+var "shorter" {str {value "Hello"; value " world"}}
+assert {shorter == joined}
+
+var "empty" {str {}}
+assert {empty == ""}
+```
+
+```lisp
+(var "joined" (str (str "Hello") (str " world")))
+(assert (== joined "Hello world"))
+(var "shorter" (str "Hello" " world"))
+(assert (== shorter joined))
+(var "empty" (str))
+(assert (== empty ""))
+```
+
+Literals and variable references inside argument blocks still use `value`.
+For example, `str {value "Hello"}` is supported, but `str {"Hello"}`
+does not implicitly convert its quoted-only subdirective into a value.
+Likewise, `value message` passes the variable’s contents, while
+`message` is a zero-argument function call.
+
+The preferred operator syntax is infix:
 
 ```confetti
 var "answer" {1 + {2 * 3}}
@@ -155,7 +187,7 @@ var "six" {+ 1 2 3}
 
 Confetti allows a new directive immediately after another directive’s closing
 brace. The translator can therefore combine a `value` directive with its
-following operator directives **inside an explicit expression block**:
+following operator directives inside the same native block:
 
 ```confetti
 var "numbers" {arr 10 20 30}
@@ -181,6 +213,20 @@ continues the expression. Subsequent operator continuations must use the
 same operator. This is an interpretation of Confetti’s native AST; no extra
 lexical scanning is involved.
 
+One logical argument can span multiple directives, while a subsequent
+`value` starts a new argument:
+
+```confetti
+assert {
+  value {str-size "Hello"} == 5
+  value "Expected exactly five bytes"
+}
+```
+
+```lisp
+(assert (== (str-size "Hello") 5) "Expected exactly five bytes")
+```
+
 Nested calls may also appear as the **last** operand without `value`:
 
 ```confetti
@@ -199,8 +245,8 @@ use the explicit `value` form above.
 
 `do` creates a sequence, evaluating its expressions in order and returning the
 last result. It also establishes Lispico’s existing sequence control-flow
-boundary. Explicit `do` is required when a block has zero or multiple
-independent expressions; a plain block cannot silently become a sequence.
+boundary. An ordinary function block expands its expressions as separate
+arguments; **explicit `do` is required to pass a sequence as one argument**.
 
 ```confetti
 var "answer" do {
@@ -223,11 +269,19 @@ do {
 symbol reference rather than a zero-argument function call. An explicit
 `value {call}` also works when the expression is a nested call.
 
+An empty ordinary block supplies no arguments; an explicit empty sequence
+supplies one argument if passed to another function:
+
 ```confetti
-do {}
+str {}    # Equivalent to (str)
+str do {} # Equivalent to (str (do))
+do {}     # Equivalent to (do)
 ```
 
-maps to `(do)`, whereas a plain empty block `{}` is rejected.
+Conditional branches are intentionally different: an `if` branch still
+requires exactly one expression, or an explicit `do` for an empty or
+multi-expression sequence. This prevents a second expression from becoming
+an accidental false branch.
 
 ### Strings, escapes, and NUL bytes
 
@@ -379,15 +433,16 @@ for executable examples of both condition forms, sequences, and chains.
 
 - [x] Translate Confetti directives into Lispico function calls and symbol references.
 - [x] Preserve string and numeric literals, including Lispico string escapes.
-- [x] Translate native `{ … }` blocks into single nested expressions.
+- [x] Expand ordinary native `{ … }` blocks into function arguments.
 - [x] Implement explicit `do { … }` sequences, including empty sequences.
 - [x] Implement `value` for passing through atoms or nested expression results.
 - [x] Translate homogeneous infix operators, including variadic arithmetic chains.
 - [x] Support prefix operator calls as ordinary directives.
 - [x] Compose `value` with neighboring operator continuation directives.
 - [x] Disable Confetti’s parenthesized-expression extension and remove its custom parser.
-- [x] Reject mixed operators, invalid continuations, and invalid plain blocks.
+- [x] Reject mixed operators, malformed continuations, and invalid conditional/value blocks.
 - [x] Translate `if` / `else if` / `else` chains using only native directives.
+- [ ] Translate chainable `&&` and `||` operators into Lispico’s `(and)` and `(or)` special forms.
 - [ ] Expand failure coverage and port more original Lispico examples to `.confetti`.
 
 ## Development environment

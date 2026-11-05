@@ -1,0 +1,2 @@
+# Even a chainable infix operator requires a right-hand operand.
+var "bad" {1 + {}}

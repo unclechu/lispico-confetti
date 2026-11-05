@@ -1,1 +1,1 @@
-var "result" { 1 + 2; 3 + 4 } # Multiple expressions require an explicit `do`
+var "result" { 1 + 2; 3 + 4 } # Two block arguments: too many for `var`

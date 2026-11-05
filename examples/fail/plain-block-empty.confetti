@@ -1,1 +1,1 @@
-var "value" {} # Empty blocks require an explicit `do`
+var "value" {} # Zero arguments from the block: `var` has no initializer

@@ -1,1 +1,1 @@
-Parse error: Block contains 2 directives; use `do { … }` for a sequence, or `value` for an operator continuation
+[FAIL] Evaluation failed: (var) expects exactly 2 arguments, got instead: 3

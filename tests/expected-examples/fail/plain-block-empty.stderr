@@ -1,1 +1,1 @@
-Parse error: Empty expression block; use `do {}`
+[FAIL] Evaluation failed: (var) expects exactly 2 arguments, got instead: 1

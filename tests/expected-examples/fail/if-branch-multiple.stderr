@@ -1,1 +1,1 @@
-Parse error: Block contains 2 directives; use `do { … }` for a sequence, or `value` for an operator continuation
+Parse error: Block contains multiple expressions; use `do { … }` for a single sequence

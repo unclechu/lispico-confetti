@@ -439,6 +439,28 @@ static bool translate_sequence_item(
   uint32_t *index
 );
 
+// Append all native subdirectives as operands of an infix call. Each
+// subdirective is one logical argument, except a `value` continuation or
+// conditional chain, which may consume several neighboring directives.
+static bool append_infix_block_operands(
+  InfixCall *call,
+  const conf_directive *directive
+) {
+  ConfettiTranslator *translator = call->translator;
+  long count = conf_get_directive_count(directive);
+  if (count == 0) {
+    snprintf(*translator->error, ERR_MSG_SIZE, "Infix operator is missing an operand");
+    return false;
+  }
+
+  for (long position = 0; position < count;) {
+    uint32_t operand = EXPR_NONE;
+    if (!translate_sequence_item(translator, directive, &position, &operand)) return false;
+    if (!append_infix_operand(call, operand)) return false;
+  }
+  return true;
+}
+
 // An operator continuation follows a `value` directive as another Confetti
 // subdirective. For example, `value {gc} == 0` is two native AST nodes.
 static bool append_operator_continuation(
@@ -465,17 +487,39 @@ static bool append_operator_continuation(
     if (i + 1 < argument_count) {
       if (!translate_argument(translator, conf_get_argument(directive, i + 1), &operand))
         return false;
-    } else if (!translate_single_block(translator, directive, &operand)) {
-      return false;
+    } else {
+      // The final block may contribute multiple operands to a chainable
+      // operator, just like a regular function argument block.
+      return append_infix_block_operands(call, directive);
     }
     if (!append_infix_operand(call, operand)) return false;
   }
   return true;
 }
 
-// A plain block normally contains one directive. A `value` followed by one or
-// more operator continuations is another single expression, assembled from
-// neighboring AST directives without interpreting any source substring.
+// A directive beginning with an operator continues a preceding `value`
+// expression when it has operator/operand pairs. An operator without any
+// operand is also treated as an incomplete continuation for a useful error.
+// A prefix call such as `+ 1 2` remains a separate expression.
+static bool begins_operator_continuation(
+  ConfettiTranslator *translator,
+  const conf_directive *directive
+) {
+  const conf_argument *first = conf_get_argument(directive, 0);
+  if (
+    first == NULL || first->value == NULL ||
+    !is_operator(first->value) ||
+    !is_bare_argument(translator, first, first->value)
+  ) return false;
+
+  long count = conf_get_argument_count(directive);
+  if (has_directive_block(translator, directive)) count++;
+  return count == 1 || (count >= 2 && count % 2 == 0);
+}
+
+// Contexts such as `if` branches and `value { … }` require exactly one
+// expression. A single expression may still span several Confetti directives
+// (a `value` plus operator continuations, or a full conditional chain).
 static bool translate_single_block(
   ConfettiTranslator *translator,
   const conf_directive *directive,
@@ -486,55 +530,15 @@ static bool translate_single_block(
     snprintf(*translator->error, ERR_MSG_SIZE, "Empty expression block; use `do {}`");
     return false;
   }
-  if (count == 1) {
-    long position = 0;
-    return translate_sequence_item(translator, directive, &position, index);
-  }
+  long position = 0;
+  if (!translate_sequence_item(translator, directive, &position, index)) return false;
+  if (position == count) return true;
 
-  const conf_directive *first = conf_get_directive(directive, 0);
-  if (!is_bare_argument(translator, conf_get_argument(first, 0), "value")) {
-    // An `if` clause may consume adjacent `then` / `else` directives, but
-    // it still represents just one expression within this plain block.
-    if (is_bare_argument(translator, conf_get_argument(first, 0), "if")) {
-      long position = 0;
-      if (!translate_sequence_item(translator, directive, &position, index)) return false;
-      if (position == count) return true;
-    }
-    snprintf(
-      *translator->error, ERR_MSG_SIZE,
-      "Block contains %ld directives; use `do { … }` for a sequence, or `value` for an operator continuation",
-      count
-    );
-    return false;
-  }
-
-  const conf_directive *continuation = conf_get_directive(directive, 1);
-  const conf_argument *operator_arg = conf_get_argument(continuation, 0);
-  if (
-    operator_arg == NULL || operator_arg->value == NULL ||
-    !is_operator(operator_arg->value) ||
-    !is_bare_argument(translator, operator_arg, operator_arg->value)
-  ) {
-    snprintf(
-      *translator->error, ERR_MSG_SIZE,
-      "Expected an operator continuation after `value`; use `do { … }` for a sequence"
-    );
-    return false;
-  }
-
-  InfixCall call;
-  if (!start_infix_call(&call, translator, operator_arg->value)) return false;
-
-  uint32_t first_operand = EXPR_NONE;
-  if (!translate_directive(translator, first, &first_operand)) return false;
-  if (!append_infix_operand(&call, first_operand)) return false;
-
-  for (long i = 1; i < count; ++i) {
-    if (!append_operator_continuation(translator, conf_get_directive(directive, i), &call))
-      return false;
-  }
-  *index = call.expression;
-  return true;
+  snprintf(
+    *translator->error, ERR_MSG_SIZE,
+    "Block contains multiple expressions; use `do { … }` for a single sequence"
+  );
+  return false;
 }
 
 static bool translate_sequence_block(
@@ -611,8 +615,10 @@ static bool translate_infix_directive(
     if (i + 1 < argument_count) {
       if (!translate_argument(translator, conf_get_argument(directive, i + 1), &operand))
         return false;
-    } else if (!translate_single_block(translator, directive, &operand)) {
-      return false;
+    } else {
+      // A final block supplies the remaining arguments to the infix call.
+      if (!append_infix_block_operands(&call, directive)) return false;
+      continue;
     }
     if (!append_infix_operand(&call, operand)) return false;
   }
@@ -855,6 +861,40 @@ static bool translate_sequence_item(
   const conf_argument *first = conf_get_argument(directive, 0);
   if (is_bare_argument(translator, first, "if"))
     return translate_if_chain(translator, container, position, index);
+
+  long count = conf_get_directive_count(container);
+  if (
+    is_bare_argument(translator, first, "value") &&
+    *position + 1 < count &&
+    begins_operator_continuation(
+      translator, conf_get_directive(container, *position + 1)
+    )
+  ) {
+    const conf_directive *next = conf_get_directive(container, *position + 1);
+    const char *operator_name = conf_get_argument(next, 0)->value;
+    InfixCall call;
+    // Allocate the outer expression first to preserve Lispico’s entry index.
+    if (!start_infix_call(&call, translator, operator_name)) return false;
+    uint32_t first_operand = EXPR_NONE;
+    if (!translate_directive(translator, directive, &first_operand)) return false;
+    if (!append_infix_operand(&call, first_operand)) return false;
+    ++*position;
+
+    while (
+      *position < count &&
+      begins_operator_continuation(
+        translator, conf_get_directive(container, *position)
+      )
+    ) {
+      if (!append_operator_continuation(
+        translator, conf_get_directive(container, *position), &call
+      )) return false;
+      ++*position;
+    }
+    *index = call.expression;
+    return true;
+  }
+
   if (
     is_bare_argument(translator, first, "else") ||
     is_bare_argument(translator, first, "then")
@@ -925,13 +965,21 @@ static bool translate_directive(
   }
 
   if (has_block) {
-    uint32_t argument = EXPR_NONE;
     if (explicit_do) {
+      uint32_t argument = EXPR_NONE;
       if (!translate_sequence_block(translator, directive, &argument)) return false;
+      append_child(translator->interpreter, *index, &previous, argument);
     } else {
-      if (!translate_single_block(translator, directive, &argument)) return false;
+      // An ordinary block supplies zero or more arguments, one expression
+      // per logical subdirective. `do` explicitly groups a sequence into one.
+      long block_count = conf_get_directive_count(directive);
+      for (long position = 0; position < block_count;) {
+        uint32_t argument = EXPR_NONE;
+        if (!translate_sequence_item(translator, directive, &position, &argument))
+          return false;
+        append_child(translator->interpreter, *index, &previous, argument);
+      }
     }
-    append_child(translator->interpreter, *index, &previous, argument);
   }
 
   return true;

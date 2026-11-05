@@ -1,0 +1,2 @@
+# Comparisons still accept exactly two operands after expansion.
+assert {1 == {value 1; value 1}}
