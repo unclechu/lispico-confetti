@@ -73,14 +73,17 @@ directives and their arguments as Lispico expressions:
 | `println message`         | `(println message)`  | Call a function with an argument              |
 | `var "x" {gc}`            | `(var "x" (gc))`     | A block supplies a call argument              |
 | `str {id "a"; id "b"}`    | `(str "a" "b")`      | Block subdirectives supply separate arguments |
+| `str "a" {id "b"}`        | `(str "a" "b")`      | Block subdirectives supply separate arguments |
+| `str "a" "b"`             | `(str "a" "b")`      | Plain arguments                               |
 | `str {}`                  | `(str)`              | Empty block supplies no arguments             |
+| `str`                     | `(str)`              | Empty block supplies no arguments             |
 | `str do {id "a"; id "b"}` | `(str (do "a" "b"))` | Explicit sequence is one argument             |
 | `id {gc}`                 | `(gc)`               | Pass the result of a nested call through      |
 | `1 + 2`                   | `(+ 1 2)`            | Infix operator directive                      |
 | `+ 1 2`                   | `(+ 1 2)`            | Ordinary prefix operator directive            |
 | `1 + 2 + 3`               | `(+ 1 2 3)`          | Chain the same arithmetic operator            |
 | `1 && 0 && 1`             | `(and 1 0 1)`        | Short-circuit logical AND                     |
-| `0 || 1 || 0`             | `(or 0 1 0)`         | Short-circuit logical OR                      |
+| `0 \|\| 1 \|\| 0`         | `(or 0 1 0)`         | Short-circuit logical OR                      |
 | `do { … }`                | `(do …)`             | Explicit sequence                             |
 
 Quoted arguments represent string literals, while bare names represent
@@ -106,13 +109,13 @@ function, one for each logical expression inside it. The block is not
 implicitly grouped into a `(do)`. For example:
 
 ```confetti
-var "joined" {str {str {id "Hello"}; str {id " world"}}}
+var "joined" {str {str "Hello"; str " world"}}
 assert {joined == "Hello world"}
 
-var "shorter" {str {id "Hello"; id " world"}}
+var "shorter" {str "Hello" " world"}
 assert {shorter == joined}
 
-var "empty" {str {}}
+var "empty" {str}
 assert {empty == ""}
 ```
 
@@ -360,8 +363,10 @@ supplies one argument if passed to another function:
 
 ```confetti
 str {}    # Equivalent to (str)
-str do {} # Equivalent to (str (do))
+str       # Equivalent to (str)
+str do {} # Equivalent to (str (do); Lispico will fail to evaluate)
 do {}     # Equivalent to (do)
+do        # Equivalent to (do)
 ```
 
 Conditional branches are intentionally different: an `if` branch still
