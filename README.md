@@ -236,6 +236,7 @@ var "numbers" {arr 10 20 30}
 assert {id {arr-get "numbers" 1} == 20}
 assert {type-of {3 - 2} == u32}
 assert {id {2 + 3} == id 5}
+sin {pi / 2.0} - 1.0
 ```
 
 ```lisp
@@ -243,6 +244,7 @@ assert {id {2 + 3} == id 5}
 (assert (== (arr-get "numbers" 1) 20))
 (assert (== (type-of (- 3 2)) u32))
 (assert (== (+ 2 3) 5))
+(- (sin (/ pi 2.0)) 1.0)
 ```
 
 Confetti provides neighboring subdirectives, not an opaque expression string:
@@ -260,6 +262,12 @@ is already a function call with an argument block, and `id` may optionally
 introduce the right operand as well. Subsequent operator continuations must
 use the same operator. This is an interpretation of Confetti’s native AST; no
 extra lexical scanning is involved.
+
+Arithmetic continuations work after any function call with a trailing block,
+not just `id`. For example, `sin {pi / 2.0} - 1.0` subtracts from the result
+of `sin`, whereas a complete prefix call such as `+ 1 2 3` remains a separate
+directive. The translator distinguishes these cases using Confetti’s native
+operator and operand arguments.
 
 A named function call with inline arguments can also precede a comparison
 within one directive:

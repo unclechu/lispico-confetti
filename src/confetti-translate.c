@@ -517,8 +517,9 @@ static bool translate_infix_argument_span(
   return true;
 }
 
-// An operator continuation follows an `id` directive as another Confetti
-// subdirective. For example, `id {gc} == 0` is two native AST nodes.
+// An operator continuation follows a completed expression as another
+// Confetti subdirective. For example, `sin {pi / 2.0} - 1.0` is two
+// native AST nodes, as is `id {gc} == 0`.
 static bool append_operator_continuation(
   ConfettiTranslator *translator,
   const conf_directive *directive,
@@ -600,10 +601,10 @@ static bool append_operator_continuation(
   return true;
 }
 
-// A directive beginning with an operator continues a preceding `id`
-// expression when it has operator/operand pairs. An operator without any
-// operand is also treated as an incomplete continuation for a useful error.
-// A prefix call such as `+ 1 2` remains a separate expression.
+// A directive beginning with an operator can continue a preceding expression
+// when it has operator/operand pairs. An operator without any operand is also
+// treated as an incomplete continuation for a useful error. A prefix call
+// such as `+ 1 2` remains a separate expression.
 static bool begins_operator_continuation(
   ConfettiTranslator *translator,
   const conf_directive *directive
@@ -623,6 +624,28 @@ static bool begins_operator_continuation(
       translator, conf_get_argument(directive, 1), "id"
     ))
   );
+}
+
+// A block call followed by `- 1.0` or `+ 1 + 2` can supply the left
+// operand of an infix expression. Distinguish those operator/operand pairs
+// from a standalone prefix call such as `+ 1 2 3` using Confetti’s arguments.
+static bool has_inline_operator_pairs(
+  ConfettiTranslator *translator,
+  const conf_directive *directive
+) {
+  if (directive == NULL || has_directive_block(translator, directive)) return false;
+  long count = conf_get_argument_count(directive);
+  if (count < 2 || count % 2 != 0) return false;
+
+  for (long i = 2; i < count; i += 2) {
+    const conf_argument *argument = conf_get_argument(directive, i);
+    if (
+      argument == NULL || argument->value == NULL ||
+      !is_operator(argument->value) ||
+      !is_bare_argument(translator, argument, argument->value)
+    ) return false;
+  }
+  return true;
 }
 
 // Contexts such as `if` branches and `id { … }` require exactly one
@@ -999,12 +1022,14 @@ static bool translate_sequence_item(
   bool next_has_id_marker = next != NULL && is_bare_argument(
     translator, conf_get_argument(next, 1), "id"
   ) && (conf_get_argument_count(next) > 2 || has_directive_block(translator, next));
+  bool next_has_inline_pairs = has_inline_operator_pairs(translator, next);
   if (
     (is_bare_argument(translator, first, "id") ||
      (has_directive_block(translator, directive) && next_operator != NULL &&
       next_operator->value != NULL &&
       conf_get_argument_count(next) >= 2 &&
-      (!is_chainable_operator(next_operator->value) || next_has_id_marker))) &&
+      (!is_chainable_operator(next_operator->value) || next_has_id_marker ||
+       next_has_inline_pairs))) &&
     next != NULL && begins_operator_continuation(translator, next)
   ) {
     const char *operator_name = conf_get_argument(next, 0)->value;

@@ -1,0 +1,12 @@
+# A regular function call with a block can be the left operand of arithmetic.
+sin {pi / 2.0} - 1.0
+assert {id {last-val} == 0.0}
+assert {id {sin {pi / 2.0} - 1.0} == 0.0}
+
+# A repeated operator still forms one expression without precedence rules.
+assert {id {sin {pi / 2.0} + 1.0 + 2.0} == 4.0}
+
+# A complete prefix call is not consumed as an infix continuation.
+do {id 5}
++ 1 2 3
+assert {id {last-val} == 6}
