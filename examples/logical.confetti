@@ -1,0 +1,44 @@
+# Confetti `&&` and `||` translate to Lispico’s short-circuit `and` / `or`.
+var "all" {1 && 2 && 3}
+var "any" {0 || 0 || 5}
+assert {all == 1}
+assert {any == 1}
+assert {value {1 && 0 && 1} == 0}
+assert {value {0 || 0 || 0} == 0}
+
+# Mixed operators require explicit nested blocks; there is no precedence.
+assert {value {1 && {0 || 1}} == 1}
+assert {value {0 || {1 && 1}} == 1}
+assert {value {1 + {1 && 0}} == 1}
+var "grouped-or" {value {1 && 0} || 1}
+assert {grouped-or == 1}
+
+# Short-circuit evaluation must skip the right-hand expression entirely.
+# The undefined function would fail evaluation if it were reached.
+assert {value {0 && {never-called}} == 0}
+assert {value {1 || {never-called}} == 1}
+
+# Prefix spellings also map to the same Lispico special forms.
+assert {value {&& 1 2 3} == 1}
+assert {value {|| 0 0 3} == 1}
+assert {value {&&} == 1}
+assert {value {||} == 0}
+
+# A `value` expression can be continued by logical operator directives.
+assert {value 1; && 1 && 2}
+assert {value 0; || 0 || 3}
+
+# Conditional expressions can use the new operators directly.
+if {1 && 1} then {
+  assert {1 == 1}
+} else {
+  assert {1 == 0}
+}
+
+# Long chains also work past Lispico’s native argument-array capacity.
+assert {
+  1 == {1 && 1 && 1 && 1 && 1 && 1 && 1 && 1 && 1 && 1 && 1 && 1 && 1 && 1 && 1 && 1 && 1 && 1}
+}
+assert {
+  1 == {0 || 0 || 0 || 0 || 0 || 0 || 0 || 0 || 0 || 0 || 0 || 0 || 0 || 0 || 0 || 0 || 0 || 1}
+}

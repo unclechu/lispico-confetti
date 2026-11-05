@@ -77,6 +77,8 @@ directives and their arguments as Lispico expressions:
 | `1 + 2`                         | `(+ 1 2)`            | Infix operator directive                      |
 | `+ 1 2`                         | `(+ 1 2)`            | Ordinary prefix operator directive            |
 | `1 + 2 + 3`                     | `(+ 1 2 3)`          | Chain the same arithmetic operator            |
+| `1 && 0 && 1`                   | `(and 1 0 1)`        | Short-circuit logical AND                     |
+| `0 || 1 || 0`                   | `(or 0 1 0)`         | Short-circuit logical OR                      |
 | `do { … }`                      | `(do …)`             | Explicit sequence                             |
 
 Quoted arguments represent string literals, while bare names represent
@@ -154,10 +156,44 @@ var "number" {1 + {2 * 3}}
 # var "number" {1 + 2 * 3}
 ```
 
-Arithmetic `+`, `-`, `*`, and `/` can be chained left to right. Comparisons
-`<`, `<=`, `>`, `>=`, `==`, and `!=` accept two operands only. A long arithmetic
-chain is split into left-associated Lispico calls when it exceeds Lispico’s
-native argument capacity.
+Arithmetic `+`, `-`, `*`, and `/` and logical `&&` and `||` can be chained left
+to right. Comparisons `<`, `<=`, `>`, `>=`, `==`, and `!=` accept two operands
+only. A long chain is split into left-associated Lispico calls when it exceeds
+Lispico’s native argument capacity.
+
+### Logical operators and short-circuiting
+
+`&&` and `||` are translated directly to Lispico’s existing `(and)` and
+`(or)` special forms. Unlike ordinary function calls, these forms stop
+evaluating arguments when the result is already known:
+
+```confetti
+var "enabled" {1 && {0 || 1}}
+assert {enabled == 1}
+
+# These undefined calls are never evaluated.
+assert {value {0 && {never-called}} == 0}
+assert {value {1 || {never-called}} == 1}
+
+# Prefix notation works too.
+assert {value {&& 1 1} == 1}
+assert {value {|| 0 1} == 1}
+```
+
+```lisp
+(var "enabled" (and 1 (or 0 1)))
+(assert (== enabled 1))
+(assert (== (and 0 (never-called)) 0))
+(assert (== (or 1 (never-called)) 1))
+(assert (== (and 1 1) 1))
+(assert (== (or 0 1) 1))
+```
+
+As with arithmetic, there is no implicit precedence or mixing of infix
+operators. `1 && 0 || 1` is invalid: use `1 && {0 || 1}` or
+`value {1 && 0} || 1` inside a block, depending on the intended grouping.
+See [the logical example](examples/logical.confetti) for executable tests,
+including nested expressions and long chains.
 
 Infix directives work at the top level too, including with Lispico’s
 `last-val` function:
@@ -442,7 +478,7 @@ for executable examples of both condition forms, sequences, and chains.
 - [x] Disable Confetti’s parenthesized-expression extension and remove its custom parser.
 - [x] Reject mixed operators, malformed continuations, and invalid conditional/value blocks.
 - [x] Translate `if` / `else if` / `else` chains using only native directives.
-- [ ] Translate chainable `&&` and `||` operators into Lispico’s `(and)` and `(or)` special forms.
+- [x] Translate chainable `&&` and `||` operators into Lispico’s `(and)` and `(or)` special forms.
 - [ ] Expand failure coverage and port more original Lispico examples to `.confetti`.
 
 ## Development environment

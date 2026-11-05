@@ -283,17 +283,29 @@ static bool is_operator(const char *name) {
     strcmp(name, "*") == 0 || strcmp(name, "/") == 0 ||
     strcmp(name, "<") == 0 || strcmp(name, "<=") == 0 ||
     strcmp(name, ">") == 0 || strcmp(name, ">=") == 0 ||
-    strcmp(name, "==") == 0 || strcmp(name, "!=") == 0
+    strcmp(name, "==") == 0 || strcmp(name, "!=") == 0 ||
+    strcmp(name, "&&") == 0 || strcmp(name, "||") == 0
   );
 }
 
 // Detect a Lispico chainable operator
-// (e.g. `1 + 2 + 3` can be chained as `(+ 1 2 3)` in Lispico).
+// (e.g. `1 + 2 + 3` becomes `(+ 1 2 3)` and
+// `1 && 0 && 1` becomes `(and 1 0 1)`).
 static bool is_chainable_operator(const char *name) {
   return (
     strcmp(name, "+") == 0 || strcmp(name, "-") == 0 ||
-    strcmp(name, "*") == 0 || strcmp(name, "/") == 0
+    strcmp(name, "*") == 0 || strcmp(name, "/") == 0 ||
+    strcmp(name, "&&") == 0 || strcmp(name, "||") == 0
   );
+}
+
+// Translate Confetti’s logical operator spelling into Lispico’s existing
+// short-circuit special forms. Keep the original name when checking chains
+// so mixing `&&` with `||` still produces a translation error.
+static const char *lispico_operator_name(const char *name) {
+  if (strcmp(name, "&&") == 0) return "and";
+  if (strcmp(name, "||") == 0) return "or";
+  return name;
 }
 
 // An infix expression is one operator repeated between operands, never mixed
@@ -321,7 +333,7 @@ static bool start_infix_call(
   if (!new_expression(translator, EXPR_LIST, &call->expression)) return false;
 
   uint32_t name = EXPR_NONE;
-  if (!new_name(translator, operator_name, &name)) return false;
+  if (!new_name(translator, lispico_operator_name(operator_name), &name)) return false;
   append_child(translator->interpreter, call->expression, &call->previous_child, name);
   return true;
 }
@@ -358,7 +370,9 @@ static bool append_infix_operand(InfixCall *call, uint32_t operand) {
 
     call->previous_child = EXPR_NONE;
     uint32_t operator_index = EXPR_NONE;
-    if (!new_name(translator, call->operator_name, &operator_index)) return false;
+    if (!new_name(
+      translator, lispico_operator_name(call->operator_name), &operator_index
+    )) return false;
     append_child(interpreter, call->expression, &call->previous_child, operator_index);
     append_child(interpreter, call->expression, &call->previous_child, inner_index);
     call->operands = 1;
@@ -939,7 +953,8 @@ static bool translate_directive(
   }
 
   // Ordinary Confetti directives call the named Lispico function. Prefix
-  // operators (`+ 1 2`, `+ 1 2 3`) remain ordinary function calls.
+  // operators remain ordinary calls; logical `&&` and `||` use their Lispico
+  // special-form names `and` and `or`.
   if (!new_expression(translator, EXPR_LIST, index)) return false;
   uint32_t previous = EXPR_NONE;
   long argument_count = count;
@@ -953,8 +968,17 @@ static bool translate_directive(
 
   for (long i = 0; i < argument_count; ++i) {
     uint32_t argument = EXPR_NONE;
-    if (!translate_argument(translator, conf_get_argument(directive, i), &argument))
+    const conf_argument *item = conf_get_argument(directive, i);
+    if (
+      i == 0 && item != NULL && item->value != NULL &&
+      (is_bare_argument(translator, item, "&&") ||
+       is_bare_argument(translator, item, "||"))
+    ) {
+      if (!new_name(translator, lispico_operator_name(item->value), &argument))
+        return false;
+    } else if (!translate_argument(translator, item, &argument)) {
       return false;
+    }
     append_child(translator->interpreter, *index, &previous, argument);
   }
 

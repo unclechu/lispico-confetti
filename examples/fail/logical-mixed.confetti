@@ -1,0 +1,2 @@
+# Operators do not mix within one directive: explicitly group subexpressions.
+var "bad" {1 && 0 || 1}
