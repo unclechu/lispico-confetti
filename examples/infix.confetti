@@ -26,17 +26,17 @@ var "numbers" {arr 10 20 30}
 assert {20 == {arr-get "numbers" 1}}
 assert {32 == {2 + {arr-get "numbers" 2}}}
 
-# `value {call}` and following operators are neighboring Confetti directives.
+# `id {call}` and following operators are neighboring Confetti directives.
 # The translator combines them into one expression, without re-tokenizing text.
-assert {value {arr-get "numbers" 1} == 20}
-assert {value {arr-get "numbers" 2} + 2}
-assert {value {arr-get "numbers" 2} + {1 + 1}}
+assert {id {arr-get "numbers" 1} == 20}
+assert {id {arr-get "numbers" 2} + 2}
+assert {id {arr-get "numbers" 2} + {1 + 1}}
 assert {
-  value {arr-get "numbers" 2}
+  id {arr-get "numbers" 2}
   + 1
   + 1
 }
-assert {value {str "Hello" " world"} == "Hello world"}
+assert {id {str "Hello" " world"} == "Hello world"}
 
 # With no special function name, a bare directive is a zero-argument call.
 var "collected" {gc}

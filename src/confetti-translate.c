@@ -454,7 +454,7 @@ static bool translate_sequence_item(
 );
 
 // Append all native subdirectives as operands of an infix call. Each
-// subdirective is one logical argument, except a `value` continuation or
+// subdirective is one logical argument, except an `id` continuation or
 // conditional chain, which may consume several neighboring directives.
 static bool append_infix_block_operands(
   InfixCall *call,
@@ -517,8 +517,8 @@ static bool translate_infix_argument_span(
   return true;
 }
 
-// An operator continuation follows a `value` directive as another Confetti
-// subdirective. For example, `value {gc} == 0` is two native AST nodes.
+// An operator continuation follows an `id` directive as another Confetti
+// subdirective. For example, `id {gc} == 0` is two native AST nodes.
 static bool append_operator_continuation(
   ConfettiTranslator *translator,
   const conf_directive *directive,
@@ -537,18 +537,18 @@ static bool append_operator_continuation(
     if (!check_infix_operator(translator, operator_arg, call->operator_name)) return false;
     ++i;
 
-    // An explicit `value` before an operand is optional. This is useful for
-    // continuations such as `value {gc} == value 0`, where Confetti puts the
+    // An explicit `id` before an operand is optional. This is useful for
+    // continuations such as `id {gc} == id 0`, where Confetti puts the
     // operator and its right-hand operand in one native directive.
-    bool explicit_value = i < argument_count && is_bare_argument(
-      translator, conf_get_argument(directive, i), "value"
+    bool explicit_id = i < argument_count && is_bare_argument(
+      translator, conf_get_argument(directive, i), "id"
     ) && (i + 1 < argument_count || has_block);
-    if (explicit_value) ++i;
+    if (explicit_id) ++i;
 
     uint32_t operand = EXPR_NONE;
     if (i < argument_count) {
       long end = i + 1;
-      if (!explicit_value) {
+      if (!explicit_id) {
         const conf_argument *first = conf_get_argument(directive, i);
         if (
           first != NULL && first->value != NULL && is_operator(first->value) &&
@@ -572,10 +572,10 @@ static bool append_operator_continuation(
       // A trailing block belongs to the final right-hand call and expands
       // its native subdirectives into that call’s arguments. Never discard it.
       bool include_block = end == argument_count && has_block;
-      if (include_block && explicit_value) {
+      if (include_block && explicit_id) {
         snprintf(
           *translator->error, ERR_MSG_SIZE,
-          "`value` expects one argument or one expression block"
+          "`id` expects one argument or one expression block"
         );
         return false;
       }
@@ -585,8 +585,8 @@ static bool append_operator_continuation(
       i = end;
     } else if (has_block) {
       // The final block may contribute multiple operands to a chainable
-      // operator. An explicit `value` requires exactly one expression.
-      if (explicit_value) {
+      // operator. An explicit `id` requires exactly one expression.
+      if (explicit_id) {
         if (!translate_single_block(translator, directive, &operand)) return false;
       } else {
         return append_infix_block_operands(call, directive);
@@ -600,7 +600,7 @@ static bool append_operator_continuation(
   return true;
 }
 
-// A directive beginning with an operator continues a preceding `value`
+// A directive beginning with an operator continues a preceding `id`
 // expression when it has operator/operand pairs. An operator without any
 // operand is also treated as an incomplete continuation for a useful error.
 // A prefix call such as `+ 1 2` remains a separate expression.
@@ -620,14 +620,14 @@ static bool begins_operator_continuation(
   return (
     count == 1 || (count >= 2 && count % 2 == 0) ||
     (count >= 3 && is_bare_argument(
-      translator, conf_get_argument(directive, 1), "value"
+      translator, conf_get_argument(directive, 1), "id"
     ))
   );
 }
 
-// Contexts such as `if` branches and `value { … }` require exactly one
+// Contexts such as `if` branches and `id { … }` require exactly one
 // expression. A single expression may still span several Confetti directives
-// (a `value` plus operator continuations, or a full conditional chain).
+// (an `id` plus operator continuations, or a full conditional chain).
 static bool translate_single_block(
   ConfettiTranslator *translator,
   const conf_directive *directive,
@@ -670,9 +670,9 @@ static bool translate_sequence_block(
   return true;
 }
 
-// Translate `value atom` or `value {call}` to the value itself, without an
+// Translate `id atom` or `id {call}` to the value itself, without an
 // extra Lispico function call. This also works as the last item in `(do)`.
-static bool translate_value_directive(
+static bool translate_id_directive(
   ConfettiTranslator *translator,
   const conf_directive *directive,
   uint32_t *index
@@ -686,7 +686,7 @@ static bool translate_value_directive(
 
   snprintf(
     *translator->error, ERR_MSG_SIZE,
-    "`value` expects one argument or one expression block"
+    "`id` expects one argument or one expression block"
   );
   return false;
 }
@@ -996,15 +996,15 @@ static bool translate_sequence_item(
   const conf_directive *next = *position + 1 < count
     ? conf_get_directive(container, *position + 1) : NULL;
   const conf_argument *next_operator = next == NULL ? NULL : conf_get_argument(next, 0);
-  bool next_has_value_marker = next != NULL && is_bare_argument(
-    translator, conf_get_argument(next, 1), "value"
+  bool next_has_id_marker = next != NULL && is_bare_argument(
+    translator, conf_get_argument(next, 1), "id"
   ) && (conf_get_argument_count(next) > 2 || has_directive_block(translator, next));
   if (
-    (is_bare_argument(translator, first, "value") ||
+    (is_bare_argument(translator, first, "id") ||
      (has_directive_block(translator, directive) && next_operator != NULL &&
       next_operator->value != NULL &&
       conf_get_argument_count(next) >= 2 &&
-      (!is_chainable_operator(next_operator->value) || next_has_value_marker))) &&
+      (!is_chainable_operator(next_operator->value) || next_has_id_marker))) &&
     next != NULL && begins_operator_continuation(translator, next)
   ) {
     const char *operator_name = conf_get_argument(next, 0)->value;
@@ -1058,8 +1058,8 @@ static bool translate_directive(
   const conf_argument *first = conf_get_argument(directive, 0);
   bool has_block = has_directive_block(translator, directive);
 
-  if (is_bare_argument(translator, first, "value"))
-    return translate_value_directive(translator, directive, index);
+  if (is_bare_argument(translator, first, "id"))
+    return translate_id_directive(translator, directive, index);
 
   // Standalone `do` consumes all of its subdirectives as a single sequence.
   if (count == 1 && has_block && is_bare_argument(translator, first, "do"))

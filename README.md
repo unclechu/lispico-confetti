@@ -63,23 +63,23 @@ nix-build -A lispico-confetti --arg useLocalSubmodules true
 Confetti supplies the complete structural AST. Lispico Confetti interprets
 directives and their arguments as Lispico expressions:
 
-| Confetti                        | Lispico              | Meaning                                       |
-| ---                             | ---                  | ---                                           |
-| `message`                       | `(message)`          | Call a function without arguments             |
-| `value message`                 | `message`            | Use a symbol’s value                          |
-| `value 123`                     | `123`                | Use a literal value                           |
-| `println message`               | `(println message)`  | Call a function with an argument              |
-| `var "x" {gc}`                  | `(var "x" (gc))`     | A block supplies a call argument              |
-| `str {value "a"; value "b"}`    | `(str "a" "b")`      | Block subdirectives supply separate arguments |
-| `str {}`                        | `(str)`              | Empty block supplies no arguments             |
-| `str do {value "a"; value "b"}` | `(str (do "a" "b"))` | Explicit sequence is one argument             |
-| `value {gc}`                    | `(gc)`               | Pass the result of a nested call through      |
-| `1 + 2`                         | `(+ 1 2)`            | Infix operator directive                      |
-| `+ 1 2`                         | `(+ 1 2)`            | Ordinary prefix operator directive            |
-| `1 + 2 + 3`                     | `(+ 1 2 3)`          | Chain the same arithmetic operator            |
-| `1 && 0 && 1`                   | `(and 1 0 1)`        | Short-circuit logical AND                     |
-| `0 || 1 || 0`                   | `(or 0 1 0)`         | Short-circuit logical OR                      |
-| `do { … }`                      | `(do …)`             | Explicit sequence                             |
+| Confetti                  | Lispico              | Meaning                                       |
+| ---                       | ---                  | ---                                           |
+| `message`                 | `(message)`          | Call a function without arguments             |
+| `id message`              | `message`            | Use a symbol’s value                          |
+| `id 123`                  | `123`                | Use a literal value                           |
+| `println message`         | `(println message)`  | Call a function with an argument              |
+| `var "x" {gc}`            | `(var "x" (gc))`     | A block supplies a call argument              |
+| `str {id "a"; id "b"}`    | `(str "a" "b")`      | Block subdirectives supply separate arguments |
+| `str {}`                  | `(str)`              | Empty block supplies no arguments             |
+| `str do {id "a"; id "b"}` | `(str (do "a" "b"))` | Explicit sequence is one argument             |
+| `id {gc}`                 | `(gc)`               | Pass the result of a nested call through      |
+| `1 + 2`                   | `(+ 1 2)`            | Infix operator directive                      |
+| `+ 1 2`                   | `(+ 1 2)`            | Ordinary prefix operator directive            |
+| `1 + 2 + 3`               | `(+ 1 2 3)`          | Chain the same arithmetic operator            |
+| `1 && 0 && 1`             | `(and 1 0 1)`        | Short-circuit logical AND                     |
+| `0 || 1 || 0`             | `(or 0 1 0)`         | Short-circuit logical OR                      |
+| `do { … }`                | `(do …)`             | Explicit sequence                             |
 
 Quoted arguments represent string literals, while bare names represent
 symbol references. Numeric arguments use Lispico’s existing numeric parser.
@@ -104,10 +104,10 @@ function, one for each logical expression inside it. The block is not
 implicitly grouped into a `(do)`. For example:
 
 ```confetti
-var "joined" {str {str {value "Hello"}; str {value " world"}}}
+var "joined" {str {str {id "Hello"}; str {id " world"}}}
 assert {joined == "Hello world"}
 
-var "shorter" {str {value "Hello"; value " world"}}
+var "shorter" {str {id "Hello"; id " world"}}
 assert {shorter == joined}
 
 var "empty" {str {}}
@@ -123,10 +123,13 @@ assert {empty == ""}
 (assert (== empty ""))
 ```
 
-Literals and variable references inside argument blocks still use `value`.
-For example, `str {value "Hello"}` is supported, but `str {"Hello"}`
+Literals and variable references inside argument blocks still use `id`, the
+identity special form. It passes its operand through without an additional
+Lispico call, like an identity function.
+
+For example, `str {id "Hello"}` is supported, but `str {"Hello"}`
 does not implicitly convert its quoted-only subdirective into a value.
-Likewise, `value message` passes the variable’s contents, while
+Likewise, `id message` passes the variable’s contents, while
 `message` is a zero-argument function call.
 
 The preferred operator syntax is infix:
@@ -172,12 +175,12 @@ var "enabled" {1 && {0 || 1}}
 assert {enabled == 1}
 
 # These undefined calls are never evaluated.
-assert {value {0 && {never-called}} == 0}
-assert {value {1 || {never-called}} == 1}
+assert {id {0 && {never-called}} == 0}
+assert {id {1 || {never-called}} == 1}
 
 # Prefix notation works too.
-assert {value {&& 1 1} == 1}
-assert {value {|| 0 1} == 1}
+assert {id {&& 1 1} == 1}
+assert {id {|| 0 1} == 1}
 ```
 
 ```lisp
@@ -191,7 +194,7 @@ assert {value {|| 0 1} == 1}
 
 As with arithmetic, there is no implicit precedence or mixing of infix
 operators. `1 && 0 || 1` is invalid: use `1 && {0 || 1}` or
-`value {1 && 0} || 1` inside a block, depending on the intended grouping.
+`id {1 && 0} || 1` inside a block, depending on the intended grouping.
 See [the logical example](examples/logical.confetti) for executable tests,
 including nested expressions and long chains.
 
@@ -204,7 +207,7 @@ last-val
 ```
 
 This returns `TYPE_U32(3)`. The regression examples also cover top-level
-`value {1 + 2}`, composed `value` expressions, and long arithmetic chains.
+`id {1 + 2}`, composed `id` expressions, and long arithmetic chains.
 
 Prefix calls are still supported: they are just ordinary Confetti directives.
 The [prefix example](examples/prefix.confetti) demonstrates both forms:
@@ -219,18 +222,18 @@ var "six" {+ 1 2 3}
 (var "six" (+ 1 2 3))
 ```
 
-### `value` and neighboring operator directives
+### `id` and neighboring operator directives
 
 Confetti allows a new directive immediately after another directive’s closing
-brace. The translator can therefore combine a `value` directive or an ordinary
+brace. The translator can therefore combine an `id` directive or an ordinary
 function call with a trailing argument block with the following operator
 directives inside the same native block:
 
 ```confetti
 var "numbers" {arr 10 20 30}
-assert {value {arr-get "numbers" 1} == 20}
+assert {id {arr-get "numbers" 1} == 20}
 assert {type-of {3 - 2} == u32}
-assert {value {2 + 3} == value 5}
+assert {id {2 + 3} == id 5}
 ```
 
 ```lisp
@@ -244,14 +247,14 @@ Confetti provides neighboring subdirectives, not an opaque expression string:
 
 ```text
 assert
-├── value
+├── id
 │   └── arr-get "numbers" 1
 └── == 20
 ```
 
-Here `value {arr-get "numbers" 1}` provides the left operand, and `== 20`
-continues the expression. The outer `value` is unnecessary when the left side
-is already a function call with an argument block, and `value` may optionally
+Here `id {arr-get "numbers" 1}` provides the left operand, and `== 20`
+continues the expression. The outer `id` is unnecessary when the left side
+is already a function call with an argument block, and `id` may optionally
 introduce the right operand as well. Subsequent operator continuations must
 use the same operator. This is an interpretation of Confetti’s native AST; no
 extra lexical scanning is involved.
@@ -261,11 +264,11 @@ within one directive:
 
 ```confetti
 assert {div 7.5 2.0 == 3.0}
-assert {div {value 7.5; value 2.0} == 3.0}
+assert {div {id 7.5; id 2.0} == 3.0}
 ```
 
 Both translate to `(assert (== (div 7.5 2.0) 3.0))`. In the second example,
-the `value` markers are needed because native Confetti subdirectives do not
+the `id` markers are needed because native Confetti subdirectives do not
 interpret `7.5 2.0` as two separate literal arguments.
 
 The right-hand operand can likewise be a function call with inline arguments:
@@ -280,19 +283,19 @@ Both assertions compare `(arr-get "signed" 0)` with `(type i32 0)`.
 Between infix operators, one native argument remains an atom, while multiple
 arguments form a function call. For example, `1 + type u32 2 + 3` translates
 to `(+ 1 (type u32 2) 3)`. Operators still cannot be mixed without braces,
-and `value` still introduces exactly one explicit operand. No new lexer or
+and `id` still introduces exactly one explicit operand. No new lexer or
 source-level grouping is needed: these are Confetti’s existing arguments.
 The final call may also use a native argument block, as in
-`assert {1 == type u32 {value 1}}`; quoted operator spellings remain ordinary
+`assert {1 == type u32 {id 1}}`; quoted operator spellings remain ordinary
 arguments rather than splitting the call.
 
 One logical argument can span multiple directives, while a subsequent
-`value` starts a new argument:
+`id` starts a new argument:
 
 ```confetti
 assert {
-  value {str-size "Hello"} == 5
-  value "Expected exactly five bytes"
+  id {str-size "Hello"} == 5
+  id "Expected exactly five bytes"
 }
 ```
 
@@ -300,7 +303,7 @@ assert {
 (assert (== (str-size "Hello") 5) "Expected exactly five bytes")
 ```
 
-Nested calls may also appear as the **last** operand without `value`:
+Nested calls may also appear as the **last** operand without `id`:
 
 ```confetti
 assert {32 == {2 + {arr-get "numbers" 2}}}
@@ -312,7 +315,7 @@ assert {32 == {2 + {arr-get "numbers" 2}}}
 
 An anonymous `{ … }` cannot appear at the start of a Confetti directive.
 Consequently, `assert {{arr-get "numbers" 1} == 20}` is not valid Confetti;
-use the explicit `value` form above.
+use the explicit `id` form above.
 
 ### Sequences and expression values
 
@@ -329,7 +332,7 @@ var "answer" do {
 
 do {
   println "Computed a result"
-  value answer
+  id answer
 }
 ```
 
@@ -338,9 +341,9 @@ do {
 (do (println "Computed a result") answer)
 ```
 
-`value answer` is important when the final sequence expression should be a
+`id answer` is important when the final sequence expression should be a
 symbol reference rather than a zero-argument function call. An explicit
-`value {call}` also works when the expression is a nested call.
+`id {call}` also works when the expression is a nested call.
 
 An empty ordinary block supplies no arguments; an explicit empty sequence
 supplies one argument if passed to another function:
@@ -402,7 +405,7 @@ decoding stage. Indentation inside the quotes is part of their value:
 ```confetti
 var "message" """First line
 Second line"""
-assert {value {str-get "message" 10} == 10}
+assert {id {str-get "message" 10} == 10}
 ```
 
 Lispico strings store explicit byte lengths, so an embedded NUL does not
@@ -497,7 +500,7 @@ above corresponds to:
 To read the value of the variable `enabled`, use `if enabled` rather than
 `if {enabled}`: the braces make `{enabled}` a zero-argument function call,
 equivalent to Lispico `(enabled)`. Inside a condition block, use
-`{value enabled}` if a variable reference must be explicitly grouped.
+`{id enabled}` if a variable reference must be explicitly grouped.
 
 See `examples/conditionals.confetti` and `examples/conditionals-root.confetti`
 for executable examples of both condition forms, sequences, and chains.
@@ -508,13 +511,13 @@ for executable examples of both condition forms, sequences, and chains.
 - [x] Preserve string and numeric literals, including Lispico string escapes.
 - [x] Expand ordinary native `{ … }` blocks into function arguments.
 - [x] Implement explicit `do { … }` sequences, including empty sequences.
-- [x] Implement `value` for passing through atoms or nested expression results.
+- [x] Implement `id` for passing through atoms or nested expression results.
 - [x] Translate homogeneous infix operators, including variadic arithmetic chains.
 - [x] Accept ungrouped right-hand function calls as infix operands.
 - [x] Support prefix operator calls as ordinary directives.
-- [x] Compose `value` with neighboring operator continuation directives.
+- [x] Compose `id` with neighboring operator continuation directives.
 - [x] Disable Confetti’s parenthesized-expression extension and remove its custom parser.
-- [x] Reject mixed operators, malformed continuations, and invalid conditional/value blocks.
+- [x] Reject mixed operators, malformed continuations, and invalid conditional or `id` blocks.
 - [x] Translate `if` / `else if` / `else` chains using only native directives.
 - [x] Translate chainable `&&` and `||` operators into Lispico’s `(and)` and `(or)` special forms.
 - [ ] Expand failure coverage and port more original Lispico examples to `.confetti`.

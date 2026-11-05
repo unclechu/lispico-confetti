@@ -67,9 +67,9 @@ do {
   println "Block evaluation works"
 }
 
-# `value` passes a variable through without calling it as a function.
+# `id` passes a variable through without calling it as a function.
 var "last-result" do {
   println "Returning a variable’s value"
-  value answer
+  id answer
 }
 assert {last-result == 15}

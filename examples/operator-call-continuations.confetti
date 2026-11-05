@@ -1,13 +1,13 @@
-# An explicit `value` can also introduce the right operand of an infix call.
-assert {value {2 + 3} == 5}
-assert {value {2 + 3} == value 5}
-assert {1 == value 1}
-assert {value {1 + value 2} == 3}
+# An explicit `id` can also introduce the right operand of an infix call.
+assert {id {2 + 3} == 5}
+assert {id {2 + 3} == id 5}
+assert {1 == id 1}
+assert {id {1 + id 2} == 3}
 
-# A function call with a native argument block needs no extra `value` wrapper.
+# A function call with a native argument block needs no extra `id` wrapper.
 assert {type-of {3 - 2} == u32}
-assert {value {type-of {3 - 2}} == u32}
-assert {div {value 7.5; value 2.0} == 3.0}
+assert {id {type-of {3 - 2}} == u32}
+assert {div {id 7.5; id 2.0} == 3.0}
 
 # A regular directive may contain a function call followed by an operator.
 assert {div 7.5 2.0 == 3.0}
@@ -19,16 +19,16 @@ var "signed" {arr {type i32 0}}
 assert {arr-get "signed" 0 == type i32 0}
 assert {arr-get "signed" 0 == {type i32 0}}
 assert {0 == type u32 0}
-assert {1 == type u32 {value 1}}
+assert {1 == type u32 {id 1}}
 assert {"++" == str "+" "+"}
 
 # Chainable operators use the next occurrence as the operand boundary.
-assert {value {1 + type u32 2 + 3} == 6}
+assert {id {1 + type u32 2 + 3} == 6}
 
 # Prefix operator calls after a block are still separate expressions.
-do {value 5}
-+ {value 1; value 2}
-assert {value {last-val} == 3}
-do {value 5}
-== {value 1; value 1}
-assert {value {last-val} == 1}
+do {id 5}
++ {id 1; id 2}
+assert {id {last-val} == 3}
+do {id 5}
+== {id 1; id 1}
+assert {id {last-val} == 1}

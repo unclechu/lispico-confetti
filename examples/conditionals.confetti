@@ -60,7 +60,7 @@ assert {result == 8}
 
 # A blocked condition can itself contain a native nested call and an
 # operator continuation; no custom expression parser is involved.
-if {value {str-size "hello"} == 5} then {
+if {id {str-size "hello"} == 5} then {
   assert {result == 8}
 }
 
@@ -93,20 +93,20 @@ if enabled {
 # Chains work inside a `do` sequence and as one expression in a plain block.
 var "nested" do {
   if 0 {
-    value 99
+    id 99
   } else {
-    value result
+    id result
   }
 }
 assert {nested == 11}
 
 var "selected" {
   if 0 {
-    value 99
+    id 99
   } else if 1 {
-    value 12
+    id 12
   } else {
-    value 99
+    id 99
   }
 }
 assert {selected == 12}

@@ -1,0 +1,1 @@
+var "bad" {id {1 + 2} +} # Missing operand after a continuation operator

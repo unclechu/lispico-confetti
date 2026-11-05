@@ -1,2 +1,2 @@
 # Adjacent directives are a single expression only for operator continuations.
-assert {value {gc} println "unexpected"}
+assert {id {gc} println "unexpected"}

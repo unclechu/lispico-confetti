@@ -1,2 +1,2 @@
 # A conditional’s blocked condition is one expression, not an argument list.
-if {1 == 1; 2 == 2} then {value 1}
+if {1 == 1; 2 == 2} then {id 1}

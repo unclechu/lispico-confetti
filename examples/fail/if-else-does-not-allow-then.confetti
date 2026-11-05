@@ -1,1 +1,1 @@
-if 0 { value 1 } else then { value 0 }
+if 0 { id 1 } else then { id 0 }

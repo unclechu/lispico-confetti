@@ -1,0 +1,2 @@
+# An `id` wrapper around an infix expression must retain its root index.
+id {1 + 2}

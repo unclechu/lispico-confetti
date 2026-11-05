@@ -1,11 +1,11 @@
 # Ordinary native Confetti blocks expand into zero or more call arguments.
-var "compact" {str {str {value "Hello"}; str {value " world"}}}
+var "compact" {str {str {id "Hello"}; str {id " world"}}}
 assert {compact == "Hello world"}
 
 # The argument list can contain literals, variable references, or calls.
-var "plain" {str {value "Hello"; value " world"}}
+var "plain" {str {id "Hello"; id " world"}}
 assert {plain == compact}
-var "with-inline" {str "A" {value "B"; value "C"}}
+var "with-inline" {str "A" {id "B"; id "C"}}
 assert {with-inline == "ABC"}
 
 # Empty argument blocks and a bare function name both pass no arguments.
@@ -15,36 +15,36 @@ assert {empty == ""}
 # An explicit `do` groups any number of expressions into one argument.
 var "sequence-result" {str do {
   str "Ignored"
-  value "Last"
+  id "Last"
 }}
 assert {sequence-result == "Last"}
 
 # The same expansion works for a function other than `str`.
-assert {== {value "ABC"; value with-inline}}
+assert {== {id "ABC"; id with-inline}}
 
-# One logical argument may span neighboring `value` and infix directives.
-# The next `value` starts the assertion’s optional message argument.
+# One logical argument may span neighboring `id` and infix directives.
+# The next `id` starts the assertion’s optional message argument.
 assert {
-  value {str-size with-inline} == 3
-  value "The concatenated string must have three bytes"
+  id {str-size with-inline} == 3
+  id "The concatenated string must have three bytes"
 }
 
-# A prefix operator remains an independent argument after a `value`.
-assert {and {value 1; + 1 2}}
+# A prefix operator remains an independent argument after an `id`.
+assert {and {id 1; + 1 2}}
 
 # Operators that allow chaining also expand their final operand block.
-assert {12 == {1 + {2 * 3; value 5}}}
+assert {12 == {1 + {2 * 3; id 5}}}
 
 # An explicit `do` inside an infix argument is still a single operand.
-assert {5 == {1 + {do {value 4}}}}
+assert {5 == {1 + {do {id 4}}}}
 
 # When the whole expression is a conditional, its branch must be one
 # expression unless it explicitly introduces a `do` sequence.
 var "conditional-result" {
   if 1 then {
-    value "yes"
+    id "yes"
   } else {
-    value "no"
+    id "no"
   }
 }
 assert {conditional-result == "yes"}

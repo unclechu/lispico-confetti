@@ -1,44 +1,44 @@
 # Confetti removes the first escape layer, then Lispico decodes the second one.
 var "message" "hello\\nworld"
-assert {value {str-size message} == 11}
-assert {value {str-get "message" 5} == 10} # LF byte
+assert {id {str-size message} == 11}
+assert {id {str-get "message" 5} == 10} # LF byte
 
 # Four source backslashes preserve a literal backslash followed by n.
 var "literal-escape" "hello\\\\nworld"
-assert {value {str-size literal-escape} == 12}
-assert {value {str-get "literal-escape" 5} == 92}
-assert {value {str-get "literal-escape" 6} == 110}
+assert {id {str-size literal-escape} == 12}
+assert {id {str-get "literal-escape" 5} == 92}
+assert {id {str-get "literal-escape" 6} == 110}
 
 # Lispico strings retain their explicit lengths when escapes produce NUL bytes.
 var "binary" "A\\0B"
-assert {value {str-size binary} == 3}
-assert {value {str-len binary} == 1}
-assert {value {str-get "binary" 1} == 0}
-assert {value {str-get "binary" 2} == 66}
+assert {id {str-size binary} == 3}
+assert {id {str-len binary} == 1}
+assert {id {str-get "binary" 1} == 0}
+assert {id {str-get "binary" 2} == 66}
 
 # Every Lispico escape works after Confetti’s decoding.
 var "control" "A\\r\\tB"
-assert {value {str-get "control" 1} == 13}
-assert {value {str-get "control" 2} == 9}
+assert {id {str-get "control" 1} == 13}
+assert {id {str-get "control" 2} == 9}
 var "path" "C:\\\\Users\\\\Lispico"
-assert {value {str-get "path" 2} == 92}
+assert {id {str-get "path" 2} == 92}
 var "quoted" "She said \"Hello\""
 assert {quoted == "She said \"Hello\""}
 
 # Triple quotes preserve literal newlines and follow the same escape rules.
 var "multiline" """First line
 Second line"""
-assert {value {str-get "multiline" 10} == 10}
+assert {id {str-get "multiline" 10} == 10}
 var "triple-escape" """hello\\nworld"""
-assert {value {str-get "triple-escape" 5} == 10}
+assert {id {str-get "triple-escape" 5} == 10}
 var "triple-binary" """A\\0B"""
-assert {value {str-get "triple-binary" 1} == 0}
+assert {id {str-get "triple-binary" 1} == 0}
 
 # The same decoding applies to quoted arguments inside nested directives.
 var "joined" {str "hello\\n" "world"}
-assert {value {str-get "joined" 5} == 10}
+assert {id {str-get "joined" 5} == 10}
 var "embedded" {str "A\\0" "B"}
-assert {value {str-size embedded} == 3}
-assert {value {str-get "embedded" 1} == 0}
+assert {id {str-size embedded} == 3}
+assert {id {str-get "embedded" 1} == 0}
 var "nested-literal" {str "A\\\\nB"}
-assert {value {str-get "nested-literal" 1} == 92}
+assert {id {str-get "nested-literal" 1} == 92}

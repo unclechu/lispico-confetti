@@ -1,2 +1,0 @@
-# A `value` wrapper around an infix expression must retain its root index.
-value {1 + 2}
