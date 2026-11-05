@@ -127,6 +127,17 @@ Arithmetic `+`, `-`, `*`, and `/` can be chained left to right. Comparisons
 chain is split into left-associated Lispico calls when it exceeds Lispico’s
 native argument capacity.
 
+Infix directives work at the top level too, including with Lispico’s
+`last-val` function:
+
+```confetti
+1 + 2
+last-val
+```
+
+This returns `TYPE_U32(3)`. The regression examples also cover top-level
+`value {1 + 2}`, composed `value` expressions, and long arithmetic chains.
+
 Prefix calls are still supported: they are just ordinary Confetti directives.
 The [prefix example](examples/prefix.confetti) demonstrates both forms:
 

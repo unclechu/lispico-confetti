@@ -1,0 +1,3 @@
+# The infix call must be the first expression, not its first operand.
+1 + 2
+last-val

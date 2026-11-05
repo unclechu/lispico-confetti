@@ -1,0 +1,5 @@
+# Nested sequences must preserve the last expression result as well.
+do {
+  1 + 2
+  last-val
+}

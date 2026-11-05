@@ -1,0 +1,2 @@
+# A `value` plus a neighboring operator directive must be the root expression.
+value {value {1 + 2} == 3}

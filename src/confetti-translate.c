@@ -309,20 +309,20 @@ typedef struct {
 static bool start_infix_call(
   InfixCall *call,
   ConfettiTranslator *translator,
-  const char *operator_name,
-  uint32_t first_operand
+  const char *operator_name
 ) {
   call->translator = translator;
   call->operator_name = operator_name;
   call->previous_child = EXPR_NONE;
   call->operands = 0;
+
+  // Allocate the call before its operands. Lispico starts evaluating at
+  // expression index 0, so the first top-level expression must own that slot.
   if (!new_expression(translator, EXPR_LIST, &call->expression)) return false;
 
   uint32_t name = EXPR_NONE;
   if (!new_name(translator, operator_name, &name)) return false;
   append_child(translator->interpreter, call->expression, &call->previous_child, name);
-  append_child(translator->interpreter, call->expression, &call->previous_child, first_operand);
-  call->operands = 1;
   return true;
 }
 
@@ -338,12 +338,30 @@ static bool append_infix_operand(InfixCall *call, uint32_t operand) {
     return false;
   }
 
-  // Lispico limits arguments per call. Continue a long arithmetic chain in
-  // another left-associated call, keeping each one within that limit.
+  // Lispico limits arguments per call. Move the completed call into a new
+  // inner expression, then reuse its original index for the enclosing call.
+  // Keeping the original index is essential when this is the first top-level
+  // expression: the evaluator always starts with expression index 0.
   if (call->operands == EVAL_ARG_CAPACITY) {
-    uint32_t previous_expression = call->expression;
-    if (!start_infix_call(call, translator, call->operator_name, previous_expression))
-      return false;
+    uint32_t inner_index = EXPR_NONE;
+    if (!new_expression(translator, EXPR_LIST, &inner_index)) return false;
+
+    Interpreter *interpreter = translator->interpreter;
+    Expression *expressions = interpreter->storage.expressions;
+    expressions[inner_index] = expressions[call->expression];
+    expressions[inner_index].next = EXPR_NONE;
+    expressions[call->expression] = (Expression) {
+      .kind = EXPR_LIST,
+      .first_child = EXPR_NONE,
+      .next = EXPR_NONE,
+    };
+
+    call->previous_child = EXPR_NONE;
+    uint32_t operator_index = EXPR_NONE;
+    if (!new_name(translator, call->operator_name, &operator_index)) return false;
+    append_child(interpreter, call->expression, &call->previous_child, operator_index);
+    append_child(interpreter, call->expression, &call->previous_child, inner_index);
+    call->operands = 1;
   }
 
   append_child(translator->interpreter, call->expression, &call->previous_child, operand);
@@ -472,9 +490,6 @@ static bool translate_single_block(
     return false;
   }
 
-  uint32_t first_operand = EXPR_NONE;
-  if (!translate_directive(translator, first, &first_operand)) return false;
-
   const conf_directive *continuation = conf_get_directive(directive, 1);
   const conf_argument *operator_arg = conf_get_argument(continuation, 0);
   if (
@@ -490,7 +505,12 @@ static bool translate_single_block(
   }
 
   InfixCall call;
-  if (!start_infix_call(&call, translator, operator_arg->value, first_operand)) return false;
+  if (!start_infix_call(&call, translator, operator_arg->value)) return false;
+
+  uint32_t first_operand = EXPR_NONE;
+  if (!translate_directive(translator, first, &first_operand)) return false;
+  if (!append_infix_operand(&call, first_operand)) return false;
+
   for (long i = 1; i < count; ++i) {
     if (!append_operator_continuation(translator, conf_get_directive(directive, i), &call))
       return false;
@@ -557,10 +577,12 @@ static bool translate_infix_directive(
     return false;
   }
 
+  InfixCall call;
+  if (!start_infix_call(&call, translator, operator_name)) return false;
+
   uint32_t first = EXPR_NONE;
   if (!translate_argument(translator, conf_get_argument(directive, 0), &first)) return false;
-  InfixCall call;
-  if (!start_infix_call(&call, translator, operator_name, first)) return false;
+  if (!append_infix_operand(&call, first)) return false;
 
   for (long i = 1; i < total; i += 2) {
     if (!check_infix_operator(
