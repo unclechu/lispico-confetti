@@ -1,0 +1,114 @@
+# Deferred expressions run only when the sequence terminates
+var "value" 0
+
+do {
+  defer { set "value" 1 }
+  assert { value ==  0 }
+}
+
+assert { value == 1 }
+
+# Registration preserves the previous evaluation value
+assert {
+  do {
+    id 123
+    defer { set "value" 2 }
+  } == 123
+}
+
+assert { value == 2 }
+
+# Deferred expressions execute in LIFO order
+var "order" 0
+
+do {
+  defer { set "order" { id { order * 10 } + 1 } } # (32 * 10) + 1 = 321
+  defer { set "order" { id { order * 10 } + 2 } } # (3 * 10) + 2 = 32
+  defer { set "order" { id { order * 10 } + 3 } } # (0 * 10) + 3 = 3
+}
+
+assert { order == 321 }
+
+# Inner sequences execute their defers before outer sequences
+set "order" 0
+
+do {
+  defer { set "order" { id { order * 10 } + 1 } } # (23 * 10) + 1 = 231
+
+  do {
+    defer { set "order" { id { order * 10 } + 2 } } # (0 * 10) + 2 = 2
+  }
+
+  defer { set "order" { id { order * 10 } + 3 } } # (2 * 10) + 3 = 23
+}
+
+assert { order == 231 }
+
+# A multi-level leave runs defers from every exited sequence
+set "order" 0
+
+do {
+  defer { set "order" { id { order * 10 } + 1 } } # (2 * 10) + 1 = 21
+
+  do {
+    defer { set "order" { id { order * 10 } + 2 } } # (0 * 10) + 2 = 2
+    leave 2
+    exit 1 "Should not execute"
+  }
+
+  exit 1 "Should not execute"
+}
+
+assert { order == 21 }
+
+# Defers observe their sequence depth before it is restored
+var "observed-depth" 0
+
+do { defer { set "observed-depth" { depth } } }
+
+assert { observed-depth == 1 }
+assert { id {depth} == 0 }
+
+# A jump within the same sequence does not trigger defers early
+set "order" 0
+
+do {
+  defer { set "order" { order * 2 } } # 20 * 2 = 40
+  label "repeat-defer"
+
+  set "order" { order + 10 } # 0 + 10 = 10, then 10 + 10 = 20
+  if order < 20 { goto repeat-defer }
+}
+
+assert { order == 40 }
+
+# A jump out of a sequence triggers its defers
+var "jumped" 0
+label "after-deferred-jump"
+
+if jumped == 0 do {
+  defer { set "jumped" 1 }
+  goto after-deferred-jump
+  exit 1 "Should not execute"
+}
+
+assert { jumped == 1 }
+
+# An unselected conditional branch does not register a defer
+set "value" 0
+do { if false { defer { set "value" 1 } } }
+assert { value == 0 }
+
+# Nested sequences created during deferred evaluation can have defers too
+set "order" 0
+
+do {
+  defer {
+    do {
+      defer { set "order" { id { order * 10 } + 2 } } # (1 * 10) + 2 = 12
+      set "order" { id { order * 10 } + 1 } # (0 * 10) + 1 = 1
+    }
+  }
+}
+
+assert { order == 12 }

@@ -1,0 +1,27 @@
+# Take exactly N bytes from the start
+assert { str-take "Hello" 0 == "" }
+assert { str-take "Hello" 1 == "H" }
+assert { str-take "Hello" 3 == "Hel" }
+assert { str-take "Hello" 5 == "Hello" }
+assert { str-take "" 0 == "" }
+assert { str-size { str-take "Hello" 3 } == 3 }
+assert { type-of { str-take "Hello" 3 } == s }
+
+# Preserve embedded NUL bytes
+assert { str-take "abc\\0def" 4 == "abc\\0" }
+assert { str-size { str-take "abc\\0def" 4 } == 4 }
+assert { str-char { str-take "abc\\0def" 4; id 3 } == 0 }
+
+# Shorten a fixed-size buffer to the bytes preceding its first NUL
+str-new "buffer" 12
+str-set "buffer" "Hi"
+var "short" { str-take buffer { str-len buffer } }
+assert { str-size buffer == 12 }
+assert { str-size short == 2 }
+assert { short == "Hi" }
+
+# Returned strings do not change with their source
+var "original" "Hello"
+var "prefix" { str-take original 3 }
+str-set "original" "World"
+assert { prefix == "Hel" }

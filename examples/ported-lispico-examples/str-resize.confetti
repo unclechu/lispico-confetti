@@ -1,0 +1,40 @@
+# Growing preserves the existing bytes and zero-fills the new space
+var "message" "Hello"
+assert { str-size { str-resize "message" 8 } == 8 }
+assert { message == "Hello\\0\\0\\0" }
+
+# Shrinking changes the length and discards the unused suffix
+str-resize "message" 2
+assert { message == "He" }
+assert { str-size message == 2 }
+
+# Growing again does not restore the discarded bytes
+str-resize "message" 5
+assert { message == "He\\0\\0\\0" }
+str-resize "message" 5 # Resizing to the same length does nothing
+
+# Resizing to and from zero is valid
+str-resize "message" 0
+assert { message == "" }
+assert { str-size message == 0 }
+str-resize "message" 3
+assert { message == "\\0\\0\\0" }
+
+# Embedded NUL bytes are copied by byte length, not by strlen()
+var "binary" "A\\0B"
+str-resize "binary" 6
+assert { binary == "A\\0B\\0\\0\\0" }
+str-resize "binary" 2
+assert { binary == "A\\0" }
+
+# Strings created by (str-new) can also be resized
+str-new "buffer" 4
+str-set "buffer" "Hi"
+str-resize "buffer" 6
+assert { buffer == "Hi\\0\\0\\0\\0" }
+
+# The string type can also have been established by (override)
+var "value" 123
+override "value" "abc"
+str-resize "value" 1
+assert { value == "a" }

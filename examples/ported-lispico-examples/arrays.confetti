@@ -1,0 +1,241 @@
+# Fixed-size, zero-initialized u32 arrays
+arr-new "numbers" u32 16
+assert { arr-size "numbers" == 16 }
+assert { arr-type "numbers" == u32 }
+assert { arr-get "numbers" 0 == 0 }
+assert { arr-get "numbers" 15 == 0 }
+assert { type-of { arr-get "numbers" 0 } == u32 }
+arr-set "numbers" 0 123
+arr-set "numbers" 15 { 1 + 2 + 3 }
+assert { arr-get "numbers" 0 == 123 }
+assert { arr-get "numbers" 15 == 6 }
+assert { arr-size "numbers" == 16 }
+
+# Computed index and length
+arr-new "computed" u32 { 2 + 3 }
+arr-set "computed" { 5 - 1; id 42 }
+assert { arr-get "computed" 4 == 42 }
+
+# Signed integers
+arr-new "signed" i32 2
+assert { arr-type "signed" == i32 }
+assert { arr-get "signed" 0 == type i32 0 }
+arr-set "signed" 1 -123
+assert { arr-get "signed" 1 == -123 }
+assert { type-of { arr-get "signed" 1 } == i32 }
+
+# Floating-point elements
+arr-new "floats" f32 2
+assert { arr-type "floats" == f32 }
+assert { arr-get "floats" 0 == 0.0 }
+arr-set "floats" 1 1.5
+assert { arr-get "floats" 1 == 1.5 }
+assert { type-of { arr-get "floats" 1 } == f32 }
+
+# String elements are initially empty and are copied independently
+arr-new "words" s 3
+assert { arr-type "words" == s }
+assert { str-size { arr-get "words" 0 } == 0 }
+var "message" "Hello"
+arr-set "words" 0 message
+arr-set "words" 1 "abc\\0def"
+str-set "message" "Hi"
+assert { arr-get "words" 0 == "Hello" }
+assert { str-size { arr-get "words" 1 } == 7 }
+assert { str-char { arr-get "words" 1; id 3 } == 0 }
+arr-set "words" 0 "Bye"
+assert { arr-get "words" 0 == "Bye" }
+assert { str-size { arr-get "words" 2 } == 0 }
+
+# Zero-length arrays are allowed
+arr-new "empty" u32 0
+assert { arr-size "empty" == 0 }
+assert { arr-type "empty" == u32 }
+
+# The array remains a distinct kind, not a scalar variable
+assert { kind-of "numbers" == arr-kind }
+
+# Read array elements directly from evaluated array values
+arr-new "direct" u32 3
+arr-set "direct" 0 123
+arr-set "direct" 1 456
+
+# Array name and array value are both accepted
+assert { arr-get "direct" 0 == 123 }
+assert { arr-get direct 0 == 123 }
+assert { arr-get direct 1 == 456 }
+assert { arr-get direct 2 == 0 }
+
+# Read from the result of (arr-new)
+assert { arr-get { arr-new "created" u32 2; id 0 } == 0 }
+
+# (arr-set) returns the saved element, not the array
+assert { arr-set "direct" 2 789 == 789 }
+assert { arr-get direct 2 == 789 }
+
+# String array values
+arr-new "direct-strings" s 2
+arr-set "direct-strings" 0 "Hello"
+assert { arr-get direct-strings 0 == "Hello" }
+assert { arr-get direct-strings 1 == "" }
+
+# Array size accepts both names and evaluated array values
+arr-new "numbers-2" u32 3
+assert { arr-size "numbers-2" == 3 }
+assert { arr-size numbers-2 == 3 }
+
+# Array element type accepts both names and evaluated array values
+assert { arr-type "numbers-2" == u32 }
+assert { arr-type numbers-2 == u32 }
+
+# Directly use results returned by array functions
+assert { arr-size { arr-new "created-2" i32 5 } == 5 }
+assert { arr-type { arr-new "created-strings" s 2 } == s }
+assert { arr-set "numbers-2" 0 123 == 123 }
+assert { arr-set "numbers-2" 1 456 == 456 }
+assert { arr-size numbers-2 == 3 }
+assert { arr-type numbers-2 == u32 }
+
+# Empty arrays are valid
+arr-new "empty-2" f32 0
+assert { arr-size empty-2 == 0 }
+assert { arr-type empty-2 == f32 }
+
+# The result types remain u32
+assert { type-of { arr-size numbers-2 } == u32 }
+assert { type-of { arr-type numbers-2 } == u32 }
+
+# (arr-set) returns a value of the array’s element type
+assert { arr-set "numbers" 1 321 == 321 }
+assert { type-of { arr-set "numbers" 2 654 } == u32 }
+assert { arr-get numbers 1 == 321 }
+assert { arr-get numbers 2 == 654 }
+assert { arr-set "signed" 0 -456 == -456 }
+assert { type-of { arr-set "signed" 0 -789 } == i32 }
+assert { arr-get signed 0 == -789 }
+assert { arr-set "floats" 0 2.5 == 2.5 }
+assert { type-of { arr-set "floats" 0 3.5 } == f32 }
+assert { arr-get floats 0 == 3.5 }
+assert { arr-set "words" 2 "World" == "World" }
+assert { type-of { arr-set "words" 2 "Lispico" } == s }
+assert { arr-get words 2 == "Lispico" }
+
+# Returned strings preserve embedded NUL bytes
+assert { str-size { arr-set "words" 2 "a\\0b" } == 3 }
+assert { str-char { arr-get words 2; id 1 } == 0 }
+
+# Anonymous arrays, with the element type inferred from the first argument
+assert { arr-size { arr 1 2 3 } == 3 }
+assert { arr-type { arr 1 2 3 } == u32 }
+assert { arr-get { arr 1 2 3; id 0 } == 1 }
+assert { arr-get { arr 1 2 3; id 2 } == 3 }
+
+# Array elements are evaluated expressions
+assert { arr-get { arr { 1 + 2; 2 * 3 }; id 1 } == 6 }
+assert { arr-get { arr { arr-get numbers 0; arr-get numbers 1 }; id 1 } == 321 }
+
+# Other supported element types
+assert { arr-type { arr -1 -2 -3 } == i32 }
+assert { arr-get { arr -1 -2 -3; id 1 } == -2 }
+assert { arr-type { arr 1.0 2.5 } == f32 }
+assert { arr-get { arr 1.0 2.5; id 1 } == 2.5 }
+assert { arr-type { arr "one" "two" } == s }
+assert { arr-get { arr "one" "two"; id 1 } == "two" }
+
+# String array elements preserve embedded NUL bytes and empty strings
+assert { str-size { arr-get { arr "a\\0b" ""; id 0 } } == 3 }
+assert { str-char { arr-get { arr "a\\0b" ""; id 0 }; id 1 } == 0 }
+assert { str-size { arr-get { arr "a\\0b" ""; id 1 } } == 0 }
+
+# Define named arrays from anonymous array values using (var)
+var "initialized-u32" { arr 10 20 30 }
+assert { kind-of "initialized-u32" == arr-kind }
+assert { arr-type initialized-u32 == u32 }
+assert { arr-size initialized-u32 == 3 }
+assert { arr-get initialized-u32 1 == 20 }
+assert { arr-get { var "initialized-i32" { arr -1 -2 }; id 0 } == -1 }
+assert { arr-type initialized-i32 == i32 }
+assert { arr-get { var "initialized-f32" { arr 1.5 2.5 }; id 1 } == 2.5 }
+assert { arr-type initialized-f32 == f32 }
+
+# String array initialization preserves empty strings and embedded NUL bytes
+var "initialized-strings" { arr "Hello" "a\\0b" "" }
+assert { arr-type initialized-strings == s }
+assert { arr-get initialized-strings 0 == "Hello" }
+assert { str-size { arr-get initialized-strings 1 } == 3 }
+assert { str-char { arr-get initialized-strings 1; id 1 } == 0 }
+assert { str-size { arr-get initialized-strings 2 } == 0 }
+
+# Copying an existing array creates independent writable storage
+arr-new "copy-source" u32 2
+arr-set "copy-source" 0 123
+arr-set "copy-source" 1 456
+var "copy-destination" copy-source
+arr-set "copy-source" 0 789
+arr-set "copy-destination" 1 321
+assert { arr-get copy-source 0 == 789 }
+assert { arr-get copy-source 1 == 456 }
+assert { arr-get copy-destination 0 == 123 }
+assert { arr-get copy-destination 1 == 321 }
+
+# String array copies preserve initialized and zero-initialized elements
+arr-new "copy-strings-source" s 3
+arr-set "copy-strings-source" 0 "Original"
+arr-set "copy-strings-source" 1 "x\\0y"
+var "copy-strings-destination" copy-strings-source
+arr-set "copy-strings-source" 0 "Changed"
+arr-set "copy-strings-destination" 1 "New"
+assert { arr-get copy-strings-source 0 == "Changed" }
+assert { str-size { arr-get copy-strings-source 1 } == 3 }
+assert { str-char { arr-get copy-strings-source 1; id 1 } == 0 }
+assert { arr-get copy-strings-destination 0 == "Original" }
+assert { arr-get copy-strings-destination 1 == "New" }
+assert { str-size { arr-get copy-strings-destination 2 } == 0 }
+
+# A typed zero-length array value can initialize a new array variable
+arr-new "empty-source" s 0
+var "empty-destination" empty-source
+assert { arr-size empty-destination == 0 }
+assert { arr-type empty-destination == s }
+
+# Array ranges copy selected elements into anonymous array values
+assert { arr-size { arr-slice { arr 10 20 30 40; id 1; id 2 } } == 2 }
+assert { arr-type { arr-slice { arr 10 20 30 40; id 1; id 2 } } == u32 }
+assert { arr-get { arr-slice { arr 10 20 30 40; id 1; id 2 } id 0 } == 20 }
+assert { arr-get { arr-slice { arr 10 20 30 40; id 1; id 2 } id 1 } == 30 }
+assert { arr-get { arr-take { arr -10 -20 -30; id 2 } id 1 } == -20 }
+assert { arr-type { arr-take { arr -10 -20 -30; id 2 } } == i32 }
+assert { arr-get { arr-drop { arr 1.0 2.0 3.0; id 2 } id 0 } == 3.0 }
+assert { arr-type { arr-drop { arr 1.0 2.0 3.0; id 2 } } == f32 }
+
+# Boundary ranges can return typed zero-length arrays
+assert { arr-size { arr-slice { arr 1 2 3; id 3; id 0 } } == 0 }
+assert { arr-type { arr-slice { arr 1 2 3; id 3; id 0 } } == u32 }
+assert { arr-size { arr-take { arr -1 -2; id 0 } } == 0 }
+assert { arr-type { arr-take { arr -1 -2; id 0 } } == i32 }
+assert { arr-size { arr-drop { arr 1.0 2.0; id 2 } } == 0 }
+assert { arr-type { arr-drop { arr 1.0 2.0; id 2 } } == f32 }
+assert { arr-size { arr-drop empty-destination 0 } == 0 }
+assert { arr-type { arr-drop empty-destination 0 } == s }
+
+# Range results own independent storage and can initialize named arrays
+var "range-source" { arr 10 20 30 40 }
+var "range-copy" { arr-slice range-source 1 2 }
+arr-set "range-source" 1 99
+arr-set "range-copy" 1 77
+assert { arr-get range-source 1 == 99 }
+assert { arr-get range-source 2 == 30 }
+assert { arr-get range-copy 0 == 20 }
+assert { arr-get range-copy 1 == 77 }
+assert { arr-get { arr-take range-source 2; id 1 } == 99 }
+assert { arr-get { arr-drop range-source 2; id 0 } == 30 }
+
+# String ranges preserve embedded NUL bytes and zero-initialized empty entries
+arr-new "range-words" s 3
+arr-set "range-words" 0 "a\\0b"
+arr-set "range-words" 2 "last"
+assert { arr-type { arr-slice range-words 0 2 } == s }
+assert { str-size { arr-get { arr-slice range-words 0 2; id 0 } } == 3 }
+assert { str-char { arr-get { arr-take range-words 1; id 0 } id 1 } == 0 }
+assert { str-size { arr-get { arr-drop range-words 1; id 0 } } == 0 }
+assert { arr-get { arr-drop range-words 2; id 0 } == "last" }

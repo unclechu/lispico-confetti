@@ -1,0 +1,20 @@
+# Unsigned 32-bit integer boundaries
+assert { u32-min == 0 }
+assert { u32-max == 4_294_967_295 }
+
+# Signed 32-bit integer boundaries
+assert { i32-min == -2_147_483_648 }
+assert { i32-max == type i32 2_147_483_647 }
+
+# Floating-point boundaries
+assert { f32-min < 0.0 }
+assert { f32-max > 0.0 }
+assert { f32-min == { 0.0 - f32-max } }
+
+# Confirm types
+assert { type-of u32-min == u32 }
+assert { type-of u32-max == u32 }
+assert { type-of i32-min == i32 }
+assert { type-of i32-max == i32 }
+assert { type-of f32-min == f32 }
+assert { type-of f32-max == f32 }

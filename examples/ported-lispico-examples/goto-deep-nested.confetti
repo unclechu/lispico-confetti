@@ -1,0 +1,26 @@
+# Jump into a previously completed, deeply nested (do).
+
+var "done" false
+
+do {
+  println "foo"
+  do {
+    println "bar"
+    label "deep-nested"
+    println "baz"
+    if done { exit 0 "done" }
+    println "will print baz again"
+  }
+}
+
+set "done" true
+goto deep-nested
+
+# The program will print:
+#   foo
+#   bar
+#   baz
+#   will print baz again
+#   baz
+#
+# Evaluation result is: `SYM_VARIABLE(TYPE_STRING("done"))`

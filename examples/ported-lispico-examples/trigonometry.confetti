@@ -1,0 +1,172 @@
+# FIXME
+# λ ./lispico-confetti <<< 'sin { pi / 2.0 } - 1.0'
+# [FAIL] Evaluation failed: (-) expects at least 2 arguments
+# λ ./lispico-confetti <<< 'id { pi / 2.0 } - 1.0'
+# SYM_VARIABLE(TYPE_F32(0.570796))
+
+# Mathematical constants
+assert { type-of pi == f32 }
+assert { type-of e == f32 }
+assert { abs { pi - 3.1415927 } < 0.00001 }
+assert { abs { e - 2.7182817 } < 0.00001 }
+
+# Sine
+assert { sin 0.0 == 0.0 }
+assert {
+  < {
+    abs {
+      - {
+        sin { pi / 2.0 }
+        id 1.0
+      }
+    }
+    id 0.00001
+  }
+}
+assert { abs { sin pi } < 0.00001 }
+
+# Cosine
+assert { cos 0.0 == 1.0 }
+assert { abs { cos pi - -1.0 } < 0.00001 }
+assert { abs { cos { pi / 2.0 } } < 0.00001 }
+
+# Tangent
+assert { tan 0.0 == 0.0 }
+assert {
+  < {
+    abs {
+      - {
+        tan { pi / 4.0 }
+        id 1.0
+      }
+    }
+    id 0.00001
+  }
+}
+
+# Inverse sine
+assert { asin 0.0 == 0.0 }
+assert {
+  < {
+    abs {
+      - {
+        asin 0.5
+        pi / 6.0
+      }
+    }
+    id 0.00001
+  }
+}
+assert {
+  < {
+    abs {
+      - {
+        asin 1.0
+        pi / 2.0
+      }
+    }
+    id 0.00001
+  }
+}
+
+# Inverse cosine
+assert { acos 1.0 == 0.0 }
+assert {
+  < {
+    abs {
+      - {
+        acos 0.0
+        pi / 2.0
+      }
+    }
+    id 0.00001
+  }
+}
+
+# Inverse tangent
+assert { atan 0.0 == 0.0 }
+assert {
+  < {
+    abs {
+      - {
+        atan 1.0
+        pi / 4.0
+      }
+    }
+    id 0.00001
+  }
+}
+
+# Two-argument inverse tangent (Y, X)
+assert { atan2 0.0 1.0 == 0.0 }
+assert {
+  < {
+    abs {
+      - {
+        atan2 1.0 0.0
+        pi / 2.0
+      }
+    }
+    id 0.00001
+  }
+}
+assert {
+  < {
+    abs {
+      - {
+        atan2 -1.0 0.0
+        pi / -2.0
+      }
+    }
+    id 0.00001
+  }
+}
+# Euclidean distance
+assert { hypot 3.0 4.0 == 5.0 }
+assert { hypot 0.0 0.0 == 0.0 }
+assert { hypot 5.0 12.0 == 13.0 }
+
+# Return types
+assert { type-of { sin 0.0 } == f32 }
+assert { type-of { cos 0.0 } == f32 }
+assert { type-of { tan 0.0 } == f32 }
+assert { type-of { asin 0.0 } == f32 }
+assert { type-of { acos 0.0 } == f32 }
+assert { type-of { atan 0.0 } == f32 }
+assert { type-of { atan2 1.0 0.0 } == f32 }
+assert { type-of { hypot 3.0 4.0 } == f32 }
+
+# Floating-point boundaries and precision constants
+assert { type-of f32-min-positive == f32 }
+assert { type-of f32-true-min == f32 }
+assert { type-of f32-epsilon == f32 }
+assert { f32-min-positive > 0.0 }
+assert { f32-true-min > 0.0 }
+assert { f32-true-min < f32-min-positive }
+assert { f32-epsilon > 0.0 }
+assert { f32-epsilon < 0.000001 }
+assert { id { 1.0 + f32-epsilon } > 1.0 }
+
+# Consistency with powers and logarithms
+assert {
+  < {
+    abs {
+      - {
+        exp 1.0
+        id e
+      }
+    }
+    id 0.00001
+  }
+}
+assert {
+  < {
+    abs {
+      - {
+        log e
+        id 1.0
+      }
+    }
+    id 0.00001
+  }
+}

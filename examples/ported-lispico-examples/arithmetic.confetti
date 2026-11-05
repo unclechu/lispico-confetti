@@ -1,0 +1,15 @@
+# Binary operators preserve the operands’ type.
+
+# u32
+assert { type-of { 2 + 3 } == u32 } assert { id { 2 + 3 } == 5 }
+assert { type-of { 3 - 2 } == u32 } assert { id { 3 - 2 } == 1 }
+assert { type-of { 6 * 7 } == u32 } assert { id { 6 * 7 } == 42 }
+assert { type-of { 7 / 2 } == u32 } assert { id { 7 / 2 } == 3 } # Integer division: 3
+
+# f32
+assert { type-of { 7.5 / 2.0 } == f32 } assert { id { 7.5 / 2.0 } == 3.75 } # Floating-point division
+assert { type-of { div 7.5 2.0 } == f32 } assert { div 7.5 2.0 == 3.0 } # Truncate the quotient but preserve f32
+assert { type-of { mod 5.5 2.0 } == f32 } assert { mod 5.5 2.0 == 1.5 } # Floating-point remainder
+assert { type-of { 7.5 / 2.0 } == f32 } assert { id { 7.5 / 2.0 } == 3.75 } # Floating-point remainder
+
+# Final result: SYS_EMPTY

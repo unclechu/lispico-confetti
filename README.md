@@ -10,7 +10,9 @@ This frontend uses **Confetti’s native `{ … }` blocks exclusively** for nest
 expressions. It does not enable Confetti’s parenthesized-expression extension,
 and it does not tokenize or parse expression strings independently.
 
-See [examples](examples) for runnable programs and
+See [examples](examples) for runnable programs,
+[examples/ported-lispico-examples](examples/ported-lispico-examples) for all
+original Lispico examples ported to Confetti syntax, and
 [examples/fail](examples/fail) for expected translation failures.
 
 ## Relationship to Lispico
@@ -504,23 +506,6 @@ equivalent to Lispico `(enabled)`. Inside a condition block, use
 
 See `examples/conditionals.confetti` and `examples/conditionals-root.confetti`
 for executable examples of both condition forms, sequences, and chains.
-
-## Implementation roadmap
-
-- [x] Translate Confetti directives into Lispico function calls and symbol references.
-- [x] Preserve string and numeric literals, including Lispico string escapes.
-- [x] Expand ordinary native `{ … }` blocks into function arguments.
-- [x] Implement explicit `do { … }` sequences, including empty sequences.
-- [x] Implement `id` for passing through atoms or nested expression results.
-- [x] Translate homogeneous infix operators, including variadic arithmetic chains.
-- [x] Accept ungrouped right-hand function calls as infix operands.
-- [x] Support prefix operator calls as ordinary directives.
-- [x] Compose `id` with neighboring operator continuation directives.
-- [x] Disable Confetti’s parenthesized-expression extension and remove its custom parser.
-- [x] Reject mixed operators, malformed continuations, and invalid conditional or `id` blocks.
-- [x] Translate `if` / `else if` / `else` chains using only native directives.
-- [x] Translate chainable `&&` and `||` operators into Lispico’s `(and)` and `(or)` special forms.
-- [ ] Expand failure coverage and port more original Lispico examples to `.confetti`.
 
 ## Development environment
 

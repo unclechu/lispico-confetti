@@ -1,0 +1,63 @@
+# Replaced string buffers become unreachable and can be collected manually
+var "message" "Hello"
+override "message" "Hi"
+assert { id {gc} == 1 }
+assert { message == "Hi" }
+assert { id {gc} == 0 } # Surviving marks must be cleared between collections
+
+# Self-assignment creates a new independent buffer and leaves the old one unused
+override "message" message
+assert { id {gc} == 1 }
+assert { message == "Hi" }
+
+# Changing a string’s size also leaves its old allocation for collection
+str-resize "message" 5
+assert { id {gc} == 1 }
+assert { message == "Hi\\0\\0\\0" }
+
+# Array values and string arrays contain multiple independent allocations
+var "words" { arr "First" "Second" }
+assert { id {gc} == 3 } # Discarded anonymous array plus its two string buffers
+assert { arr-get "words" 1 == "Second" }
+override "words" 123
+assert { id {gc} == 3 } # Named array storage plus its two string buffers
+
+# Replacing an array string element leaves only that element’s old buffer unused
+arr-new "entries" s 1
+arr-set "entries" 0 "Old"
+arr-set "entries" 0 "New"
+assert { id {gc} == 1 }
+assert { arr-get "entries" 0 == "New" }
+
+# Zero-initialized string arrays have NULL string pointers, which are not allocations
+arr-new "empty-strings" s 2
+assert { id {gc} == 0 }
+assert { arr-get "empty-strings" 0 == "" }
+
+# An earlier native-function argument remains live when a later argument calls GC
+assert { str { str "Hello"; do { gc; id " world" } } == "Hello world" }
+assert { id {gc} == 2 } # Clean up `(str)` allocations
+
+# GC must also retain an argument whose named source is replaced mid-expression
+var "original" "Old"
+assert {
+  str original {
+    do {
+      override "original" "New"
+      assert { id {gc} == 0 }
+      id "Value"
+    }
+  } == "OldValue"
+}
+assert { original == "New" }
+# Clean up `(str)` allocation and thrown away (by `(override)`) old `original` value
+assert { id {gc} == 2 }
+
+# Deferred evaluation saves a result while temporarily overwriting eval_outcome
+var "deferred-result" {
+  do {
+    defer { do { str "temporary"; assert { id {gc} == 0 } } }
+    str "preserved"
+  }
+}
+assert { deferred-result == "preserved" }

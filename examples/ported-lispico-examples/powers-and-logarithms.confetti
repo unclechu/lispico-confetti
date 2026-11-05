@@ -1,0 +1,53 @@
+# (pow) — u32
+assert { pow 2 10 == 1024 }
+assert { pow 5 0 == 1 }
+assert { pow 0 0 == 1 }
+assert { pow 0 5 == 0 }
+assert { pow 2 31 == 2_147_483_648 }
+assert { pow 1 u32-max == 1 }
+
+# i32 boundary test
+assert { type i32 { pow 2 31 - 1 } == i32-max }
+assert { pow -2 { type i32 31 } == i32-min }
+
+# (pow) — i32
+assert { pow -2 { type i32 3 } == type i32 -8 }
+assert { pow -2 { type i32 4 } == type i32 16 }
+assert { pow -2 { type i32 31 } == i32-min }
+assert { pow { type i32 5; type i32 0 } ==  type i32 1 }
+assert { pow { type i32 -1; id i32-max } == type i32 -1 }
+
+# (pow) — f32
+assert { pow 2.0 10.0 == 1024.0 }
+assert { pow 4.0 0.5 == 2.0 }
+assert { pow 2.0 -1.0 == 0.5 }
+assert { pow -2.0 3.0 == -8.0 }
+
+# (sqrt)
+assert { sqrt 0.0 == 0.0 }
+assert { sqrt 25.0 == 5.0 }
+assert { sqrt 2.0 > 1.4 }
+assert { sqrt 2.0 < 1.5 }
+
+# (log)
+assert { log 1.0 == 0.0 }
+assert { log 10.0 > 2.3 }
+assert { log 10.0 < 2.4 }
+
+# (log10)
+assert { log10 1.0 == 0.0 }
+assert { abs { log10 1000.0 - 3.0 } < 0.0001 }
+
+# (exp)
+assert { exp 0.0 == 1.0 }
+assert { exp 1.0 > 2.7 }
+assert { exp 1.0 < 2.8 }
+
+# Return types
+assert { type-of { pow 2 10 } == u32 }
+assert { type-of { pow -2 { type i32 3 } } == i32 }
+assert { type-of { pow 2.0 3.0 } == f32 }
+assert { type-of { sqrt 4.0 } == f32 }
+assert { type-of { log 2.0 } == f32 }
+assert { type-of { log10 2.0 } == f32 }
+assert { type-of { exp 2.0 } == f32 }

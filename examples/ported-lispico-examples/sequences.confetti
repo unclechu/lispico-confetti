@@ -1,0 +1,9 @@
+do {
+  2 + 3
+  do {
+    id {last-val} + 4
+    id {last-val} + 5
+  }
+}
+id {last-val} + 10
+assert { id {last-val} == 24; id "Final value must be 24" }

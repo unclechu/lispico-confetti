@@ -1,0 +1,57 @@
+# (set) preserves the original string length, while (override) replaces it
+var "message" "Hello"
+set "message" "Hi"
+assert { message == "Hi\\0\\0\\0" }
+assert { str-size message == 5 }
+override "message" "Hi"
+assert { message == "Hi" }
+assert { str-size message == 2 }
+
+# Replacing the same variable can change both the type and symbol kind
+override "message" -42
+assert { type-of message == i32 }
+assert { message == -42 }
+override "message" 3.5
+assert { type-of message == f32 }
+override "message" { arr 10 20 }
+assert { kind-of "message" == arr-kind }
+assert { arr-size "message" == 2 }
+assert { arr-get "message" 1 == 20 }
+
+# Replacing from another array must make an independent copy
+var "numbers" { arr 1 2 3 }
+override "message" numbers
+arr-set "numbers" 0 99
+assert { arr-get "message" 0 == 1 }
+
+# String arrays are also deeply copied, preserving embedded NUL bytes
+var "words" { arr "Hello\\0World" "Second" }
+override "message" words
+arr-set "words" 0 "Changed"
+assert { arr-get "message" 0 == "Hello\\0World" }
+assert { str-size { arr-get "message" 0 } == 11 }
+
+# Self-assignment must be safe for both arrays and strings
+override "message" message
+assert { arr-get "message" 1 == "Second" }
+override "message" "Done"
+override "message" message
+assert { message == "Done" }
+
+# Zero-length strings and arrays are valid replacements
+override "message" ""
+assert { str-size message == 0 }
+arr-new "empty-array" u32 0
+override "message" empty-array
+assert { arr-size "message" == 0 }
+
+# Any existing symbol, including a label or a native function, can be replaced
+label "place"
+override "place" 123
+assert { place == 123 }
+assert { kind-of "println" == native-fn-kind }
+override "println" 42
+assert { kind-of "println" == var-kind }
+assert { println == 42 }
+override "override" 99
+assert { override == 99 }

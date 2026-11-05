@@ -1,0 +1,28 @@
+# Drop exactly N bytes from the start
+assert { str-drop "Hello" 0 == "Hello" }
+assert { str-drop "Hello" 1 == "ello" }
+assert { str-drop "Hello" 3 == "lo" }
+assert { str-drop "Hello" 5 == "" }
+assert { str-drop "" 0 == "" }
+assert { str-size { str-drop "Hello" 2 } == 3 }
+assert { type-of { str-drop "Hello" 2 } == s }
+
+# Preserve embedded NUL bytes
+assert { str-drop "abc\\0def" 3 == "\\0def" }
+assert { str-drop "abc\\0def" 4 == "def" }
+assert { str-size { str-drop "abc\\0def" 3 } == 4 }
+assert { str-char { str-drop "abc\\0def" 3; id 0 } == 0 }
+
+# Works with evaluated strings
+assert { str-drop { str "Hello" " world"; id 6 } == "world" }
+assert { str-drop { type s 12345; id 2 } == "345" }
+
+# Returned strings do not change with their source
+var "original" "Hello world"
+var "suffix" { str-drop original 6 }
+str-set "original" "Hi"
+assert { suffix == "world" }
+
+# Empty string-array elements can be dropped by zero bytes
+arr-new "strings" s 1
+assert { str-drop { arr-get strings 0; id 0 } == "" }

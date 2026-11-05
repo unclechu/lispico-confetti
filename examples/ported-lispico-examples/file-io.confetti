@@ -1,0 +1,79 @@
+# Reading regular files returns strings with their exact byte lengths
+assert { read-file "tests/fixtures/file-io-input.txt" == "Hello from a file\\nSecond line\\n" }
+assert { str-size { read-file "tests/fixtures/file-io-input.txt" } == 30 }
+assert { type-of { read-file "tests/fixtures/file-io-input.txt" } == s }
+
+# Device files do not need to provide a regular file size
+assert { read-file "/dev/null" == "" }
+assert { str-size { read-file "/dev/null" } == 0 }
+
+# Empty contents and embedded NUL bytes are valid output
+write-file "/dev/null" ""
+write-file "/dev/null" "abc\\0def"
+
+# Writing to /dev/stdout uses the same chunked writer
+write-file "/dev/stdout" "Hello from write-file\\n"
+
+# An example of multiple chunks (4KiB) reading
+assert {
+  str-size { read-file "README.md" } > id { 1024 * 10 }
+  id "README.md must be more than 10 KiB"
+}
+
+# Unlimited reads do not initialize bounded-read status variables
+assert { kind-of "read-file-status" == empty-kind }
+read-file "/dev/null"
+assert { kind-of "read-file-status" == empty-kind }
+
+# Constants-ish are not set either before first bounded-read call
+assert { kind-of "read-file-status-ok" == empty-kind }
+assert { kind-of "read-file-status-truncated" == empty-kind }
+
+# Bounded reads return a prefix and initialize status variables lazily
+assert { read-file "tests/fixtures/read-file-boundaries.txt" 4 == "0123" }
+assert { read-file-status == read-file-status-truncated }
+assert { read-file-status-ok == 0 }
+assert { read-file-status-truncated == 1 }
+
+# A limit equal to the file length is a complete read, not truncation
+assert { read-file "tests/fixtures/read-file-boundaries.txt" 11 == "0123456789\\n" }
+assert { read-file-status == read-file-status-ok }
+assert { read-file "tests/fixtures/read-file-boundaries.txt" 20 == "0123456789\\n" }
+assert { read-file-status == read-file-status-ok }
+
+# Even the zero-byte limit distinguishes nonempty and empty inputs
+assert { read-file "tests/fixtures/read-file-boundaries.txt" 0 == "" }
+assert { read-file-status == read-file-status-truncated }
+assert { read-file "/dev/null" 0 == "" }
+assert { read-file-status == read-file-status-ok }
+
+# An unlimited read does not overwrite the previous bounded read status
+read-file "tests/fixtures/read-file-boundaries.txt" 0
+read-file "/dev/null"
+assert { read-file-status == read-file-status-truncated }
+
+# Check filesystem path existence without attempting to open a file
+assert { file-exists "README.md" == true }
+assert { file-exists "tests/fixtures/file-io-input.txt" == true }
+assert { file-exists "tests/fixtures" == true }
+
+# Existing directories count as paths
+assert { file-exists "tests/fixtures/nonexistent-lispico-file.txt" == false }
+assert { type-of { file-exists "README.md" } == u32 }
+
+# File types are returned as u32 values, with constants created on first use
+assert { kind-of "file-type-file" == empty-kind }
+assert { file-type "README.md" == file-type-file }
+assert { file-type-other == 0 }
+assert { file-type-does-not-exist == 1 }
+assert { file-type-file == 2 }
+assert { file-type-dir == 3 }
+assert { file-type-symlink-dead == 4 }
+assert { file-type-symlink-file == 5 }
+assert { file-type-symlink-dir == 6 }
+assert { file-type-symlink-other == 7 }
+assert { file-type "examples" == file-type-dir }
+assert { file-type "tests/fixtures/nonexistent-lispico-file.txt" == file-type-does-not-exist }
+assert { file-type "README.md/not-a-directory" == file-type-does-not-exist }
+assert { file-type "/dev/null" == file-type-other }
+assert { type-of { file-type "README.md" } == u32 }

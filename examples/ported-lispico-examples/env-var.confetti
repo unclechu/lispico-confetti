@@ -1,0 +1,27 @@
+# Environment variables are considered set even when their value is empty
+assert { env-var-has "LISPICO_CONFETTI_TEST_ENV_PRESENT" == true }
+assert { env-var-has "LISPICO_CONFETTI_TEST_ENV_EMPTY" == true }
+assert { env-var-has "LISPICO_CONFETTI_TEST_ENV_UNSET" == false }
+assert { type-of { env-var-has "LISPICO_CONFETTI_TEST_ENV_PRESENT" } == u32 }
+
+# Read environment values without or with an optional fallback
+assert { env-var-read "LISPICO_CONFETTI_TEST_ENV_PRESENT" == "Hello from environment" }
+assert { env-var-read "LISPICO_CONFETTI_TEST_ENV_PRESENT" "fallback" == "Hello from environment" }
+assert { type-of { env-var-read "LISPICO_CONFETTI_TEST_ENV_PRESENT" } == s }
+
+# Empty values only use the fallback if one was provided
+assert { env-var-read "LISPICO_CONFETTI_TEST_ENV_EMPTY" == "" }
+assert { env-var-read "LISPICO_CONFETTI_TEST_ENV_EMPTY" "fallback" == "fallback" }
+assert { env-var-read "LISPICO_CONFETTI_TEST_ENV_UNSET" "fallback" == "fallback" }
+assert { env-var-read "LISPICO_CONFETTI_TEST_ENV_UNSET" "" == "" }
+
+# Fallback strings preserve their original byte lengths and embedded NULs
+assert { env-var-read "LISPICO_CONFETTI_TEST_ENV_EMPTY" "a\\0b" == "a\\0b" }
+assert { str-size { env-var-read "LISPICO_CONFETTI_TEST_ENV_EMPTY" "a\\0b" } == 3 }
+assert { str-char { env-var-read "LISPICO_CONFETTI_TEST_ENV_EMPTY" "a\\0b"; id 1 } == 0 }
+
+# Returned strings have independent storage and can be assigned to variables
+var "copied" { env-var-read "LISPICO_CONFETTI_TEST_ENV_PRESENT" }
+assert { copied == "Hello from environment" }
+str-set "copied" "Changed"
+assert { env-var-read "LISPICO_CONFETTI_TEST_ENV_PRESENT" == "Hello from environment" }

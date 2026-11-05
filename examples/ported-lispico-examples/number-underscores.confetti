@@ -1,0 +1,33 @@
+# Unsigned integers
+assert { 1_000_000 == 1000000 }
+assert { 1_2_3 == 123 }
+assert { 0_0_1 == 1 }
+assert { 4_294_967_295 == 4294967295 }
+
+# Signed integers
+assert { -1_000_000 == -1000000 }
+assert { -2_147_483_648 == -2147483648 }
+assert { +1_000_000 == 1000000 }
+
+# Floating-point numbers
+assert { 1_234.5_0 == 1234.5 }
+assert { .1_25 == 0.125 }
+assert { -1_000.5 == -1000.5 }
+assert { 1_000. == 1000. }
+
+# Exponent notation
+assert { 1_2e+2 == 1200. }
+assert { 1.25e1_0 == 1.25e10 }
+assert { 1_000e-3 == 1. }
+
+# Type inference remains unchanged
+assert { type-of 1_000_000 == u32 }
+assert { type-of -1_000_000 == i32 }
+assert { type-of 1_000.5 == f32 }
+assert { type-of 1_000e2 == f32 }
+
+# String-to-number conversions use the same parser
+assert { type u32 "1_000_000" == 1000000 }
+assert { type i32 "-1_000_000" == -1000000 }
+assert { type f32 "1_234.5" == 1234.5 }
+assert { type f32 "1_2e+2" == 1200. }

@@ -166,6 +166,15 @@ for source in examples/*.confetti; do
   run_test "$source" "tests/expected-examples/$name"
 done
 
+# Test all ported Lispico examples
+for source in examples/ported-lispico-examples/*.confetti; do
+  # Get the name with parent directory path and *.confetti extension removed
+  name="${source##*/}"
+  name="${name%.confetti}"
+
+  run_test "$source" "tests/expected-ported-lispico-examples/$name"
+done
+
 # Test all expected failures
 for source in examples/fail/*.confetti; do
   # Get the name with parent directory path and *.confetti extension removed

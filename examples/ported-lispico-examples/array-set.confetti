@@ -1,0 +1,68 @@
+# (set) overwrites named arrays in place without changing their capacity
+arr-new "set-numbers" u32 5
+arr-set "set-numbers" 3 999
+arr-set "set-numbers" 4 888
+assert { arr-size { set "set-numbers" { arr 10 20 30 } } == 5 }
+assert { arr-type set-numbers == u32 }
+assert { arr-get set-numbers 0 == 10 }
+assert { arr-get set-numbers 1 == 20 }
+assert { arr-get set-numbers 2 == 30 }
+assert { arr-get set-numbers 3 == 0 }
+assert { arr-get set-numbers 4 == 0 }
+
+# Assigning a full-length or empty source works without changing array length
+set "set-numbers" { arr 1 2 3 4 5 }
+assert { arr-get { set "set-numbers" set-numbers; id 4 } == 5 }
+set "set-numbers" { arr-take { arr 1 2; id 0 } }
+assert { arr-size set-numbers == 5 }
+assert { arr-get set-numbers 0 == 0 }
+assert { arr-get set-numbers 4 == 0 }
+
+# Signed and floating-point arrays also zero-fill the remaining elements
+var "set-signed" { arr -1 -2 -3 }
+set "set-signed" { arr -9 }
+assert { arr-get set-signed 0 == -9 }
+assert { arr-get set-signed 1 == type i32 0 }
+assert { arr-get set-signed 2 == type i32 0 }
+var "set-floats" { arr 1.0 2.0 3.0 }
+set "set-floats" { arr 9.5 }
+assert { arr-get set-floats 0 == 9.5 }
+assert { arr-get set-floats 1 == 0.0 }
+assert { arr-get set-floats 2 == 0.0 }
+
+# (set) copies values rather than sharing the source array’s storage
+var "set-source" { arr 123 456 }
+set "set-numbers" set-source
+arr-set "set-source" 0 789
+assert { arr-get set-numbers 0 == 123 }
+assert { arr-get set-numbers 1 == 456 }
+assert { arr-get set-numbers 2 == 0 }
+
+# String arrays copy the prefix and clear trailing entries using NULL and length 0
+arr-new "set-words" s 4
+arr-set "set-words" 0 "previous"
+arr-set "set-words" 1 "old"
+arr-set "set-words" 2 "unused"
+arr-set "set-words" 3 "tail"
+assert { arr-size { set "set-words" { arr "Hi" "a\\0b" } } == 4 }
+assert { arr-get set-words 0 == "Hi" }
+assert { str-size { arr-get set-words 1 } == 3 }
+assert { str-char { arr-get set-words 1; id 1 } == 0 }
+assert { str-size { arr-get set-words 2 } == 0 }
+assert { str-size { arr-get set-words 3 } == 0 }
+
+# Self-assignment and copying zero-initialized string elements
+assert { arr-get { set "set-words" set-words; id 0 } == "Hi" }
+arr-new "set-empty-words" s 2
+set "set-words" set-empty-words
+assert { arr-type set-words == s }
+assert { arr-size set-words == 4 }
+assert { str-size { arr-get set-words 0 } == 0 }
+assert { str-size { arr-get set-words 1 } == 0 }
+assert { str-size { arr-get set-words 2 } == 0 }
+assert { str-size { arr-get set-words 3 } == 0 }
+
+# Zero-length destinations accept only zero-length source arrays
+arr-new "set-zero" u32 0
+assert { arr-size { set "set-zero" { arr-take { arr 1; id 0 } } } == 0 }
+assert { arr-type set-zero == u32 }

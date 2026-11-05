@@ -1,0 +1,99 @@
+# Replace individual bytes
+var "message" "Hello"
+str-set "message" 0 74
+assert { str-char message 0 == 74 }
+assert { str-get "message" 0 == 74 }
+
+# Replace a range without changing the remaining bytes
+str-set "message" 1 "uic"
+assert { str-char message 0 == 74 }
+assert { str-char message 1 == 117 }
+assert { str-char message 2 == 105 }
+assert { str-char message 3 == 99 }
+assert { str-char message 4 == 111 }
+assert { str-size message == 5 }
+
+# Overwrite from the beginning and zero-fill the remainder
+str-set "message" "Hi"
+assert { str-char message 0 == 72 }
+assert { str-char message 1 == 105 }
+assert { str-char message 2 == 0 }
+assert { str-char message 3 == 0 }
+assert { str-char message 4 == 0 }
+assert { str-size message == 5 }
+
+# Write zero and the maximum possible byte value
+str-set "message" 2 255
+assert { str-char message 2 == 255 }
+str-set "message" 2 0
+assert { str-char message 2 == 0 }
+
+# Indexed string replacement preserves untouched bytes
+var "alphabet" "ABCDEFG"
+str-set "alphabet" 2 "xyz"
+assert { str-char alphabet 0 == 65 }
+assert { str-char alphabet 1 == 66 }
+assert { str-char alphabet 2 == 120 }
+assert { str-char alphabet 3 == 121 }
+assert { str-char alphabet 4 == 122 }
+assert { str-char alphabet 5 == 70 }
+assert { str-char alphabet 6 == 71 }
+
+# Replacing the last byte
+str-set "alphabet" 6 33
+assert { str-char alphabet 6 == 33 }
+
+# Empty source at the end is allowed and changes nothing
+str-set "alphabet" 7 ""
+assert { str-size alphabet == 7 }
+assert { str-char alphabet 6 == 33 }
+
+# Empty full replacement zero-fills the entire string
+str-set "alphabet" ""
+assert { str-size alphabet == 7 }
+assert { str-char alphabet 0 == 0 }
+assert { str-char alphabet 6 == 0 }
+
+# Empty string variables can accept empty replacements
+var "empty" ""
+str-set "empty" ""
+str-set "empty" 0 ""
+assert { str-size empty == 0 }
+
+# String variables must own independent copies
+var "first" "abc"
+var "second" first
+str-set "first" 0 88
+assert { str-char first 0 == 88 }
+assert { str-char second 0 == 97 }
+
+# (set) must also preserve the original string length
+var "fixed" "12345"
+set "fixed" "Hi"
+assert { str-size fixed == 5 }
+assert { str-char fixed 0 == 72 }
+assert { str-char fixed 1 == 105 }
+assert { str-char fixed 2 == 0 }
+assert { str-char fixed 4 == 0 }
+
+# Writing from the string to itself is safe
+str-set "fixed" fixed
+assert { str-size fixed == 5 }
+assert { str-char fixed 0 == 72 }
+
+# (str-set) returns the modified string
+assert { type-of { str-set "fixed" 0 65 } == s }
+assert { str-char fixed 0 == 65 }
+
+# Replace char to another char (without manually specifying byte numbers)
+var "char-replacement" "john"
+str-set "char-replacement" 0 { str-char "J" }
+assert { char-replacement == "John" }
+
+# Replace last character
+var "last-char-replacement" "Hello"
+str-set "last-char-replacement" {
+  str-size last-char-replacement - 1
+  str-char "!"
+}
+assert { last-char-replacement == "Hell!" }

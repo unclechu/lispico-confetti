@@ -1,0 +1,5 @@
+# Variable definitions are global and types do not change.
+var "counter" 5
+set "counter" { counter + 3 }
+assert { counter == 8; id "Final counter value must be 8" }
+id counter # TYPE_U32(8)

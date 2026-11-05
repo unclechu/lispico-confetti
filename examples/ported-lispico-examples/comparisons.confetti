@@ -1,0 +1,9 @@
+# Boolean `true` and `false` values are just u32 variables
+assert { id { true == 1 } && { type-of true == id u32 } }
+assert { id { false == 0 } && { type-of false == id u32 } }
+
+assert { id { 2 < 3 } == true } # true: 1
+assert { id { 3.0 >= 3.0 } == true } # true: 1
+assert { id { "hello" == "hello" } == true } # true: 1
+assert { id { "apple" < "banana" } == true } # bytewise lexical order: true
+assert { id { "foo" != "bar" } == true } # true: 1

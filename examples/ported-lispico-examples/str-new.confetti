@@ -1,0 +1,57 @@
+# Create an empty string variable
+str-new "empty" 0
+assert { str-size empty == 0 }
+assert { empty == "" }
+assert { type-of empty == s }
+
+# Create a fixed-size zero-initialized string
+str-new "buffer" 5
+assert { str-size buffer == 5 }
+assert { str-get "buffer" 0 == 0 }
+assert { str-get "buffer" 1 == 0 }
+assert { str-get "buffer" 2 == 0 }
+assert { str-get "buffer" 3 == 0 }
+assert { str-get "buffer" 4 == 0 }
+
+# Write individual bytes into the new string
+str-set "buffer" 0 { str-char "H" }
+str-set "buffer" 1 { str-char "e" }
+str-set "buffer" 2 { str-char "l" }
+str-set "buffer" 3 { str-char "l" }
+str-set "buffer" 4 { str-char "o" }
+assert { buffer == "Hello" }
+assert { str-size buffer == 5 }
+
+# Overwrite without changing the allocated length
+str-set "buffer" "Hi"
+assert { str-size buffer == 5 }
+assert { str-get "buffer" 0 == 72 }
+assert { str-get "buffer" 1 == 105 }
+assert { str-get "buffer" 2 == 0 }
+assert { str-get "buffer" 3 == 0 }
+assert { str-get "buffer" 4 == 0 }
+
+# Create a string with enough space for concatenated content
+str-new "message" 14
+str-set "message" { str "Hello" ", " "Lispico" }
+assert { message == "Hello, Lispico" }
+assert { str-size message == 14 }
+
+# Length can be an evaluated u32 expression
+str-new "computed" { 2 + 3 }
+assert { str-size computed == 5 }
+
+# Zero-length strings can be updated with empty strings
+str-set "empty" ""
+str-set "empty" 0 ""
+assert { str-size empty == 0 }
+
+# The function returns the newly created string
+assert { type-of { str-new "returned" 3 } == s }
+assert { str-size returned == 3 }
+
+# NUL-terminated length vs. fixed string size
+assert { str-len buffer == 2 }
+assert { str-size buffer == 5 }
+assert { str-len empty == 0 }
+assert { str-len message == 14 }

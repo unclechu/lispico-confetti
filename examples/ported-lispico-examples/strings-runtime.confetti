@@ -1,0 +1,25 @@
+# Strings concatenation using `(str)` (runtime string allocation)
+
+# Reserve 14 bytes so the concatenated string fits
+var "message" "Hello         "
+set "message" { str "Hello" ", " { str "Lisp" "ico" } }
+println message # Will print “Hello, Lispico”
+
+println { str } # Will print just an empty line
+assert {
+  id {str} == id ""
+  id "(str) must be equal to an empty string"
+}
+
+# Will print “a<NUL>bc” (`(println)` includes `\0` terminators).
+# Depending on terminal it will likely look like just “abc”.
+println { str "a\\0b" "c" }
+assert {
+  str "a\\0b" "c" == id "a\\0bc"
+  id "NUL string terminators must be part of the concatenated string"
+}
+
+assert {
+  message == "Hello, Lispico"
+  id "Concatenated message must be “Hello, Lispico”"
+}

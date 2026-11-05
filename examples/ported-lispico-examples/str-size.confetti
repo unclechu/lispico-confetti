@@ -1,0 +1,28 @@
+# Empty string
+assert { str-size "" == 0 }
+
+# String literals
+assert { str-size "a" == 1 }
+assert { str-size "hello" == 5 }
+assert { str-size "hello world" == 11 }
+
+# Whitespace is part of the string
+assert { str-size "   " == 3 }
+assert { str-size " hello " == 7 }
+
+# Concatenated strings
+assert { str-size { str "hello" " " "world" } == 11 }
+assert { str-size { str "" "abc" "" } == 3 }
+assert { str-size { str } == 0 }
+
+# String variables
+var "message" "Hello, Lispico!"
+assert { str-size message == 15 }
+
+# String conversion
+assert { str-size { type s 12345 } == 5 }
+assert { str-size { type s -123 } == 4 }
+
+# Result type
+assert { type-of { str-size "hello" } == u32 }
+assert { type-of { str-size "" } == u32 }

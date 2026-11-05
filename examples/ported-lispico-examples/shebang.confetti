@@ -1,0 +1,4 @@
+#!/usr/bin/env lispico-confetti
+
+assert { id { 2 + 3 } == 5 }
+println "Shebang works!"

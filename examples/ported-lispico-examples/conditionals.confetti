@@ -1,0 +1,15 @@
+# Only the selected branch runs.
+
+if 5 > 2 {
+  println "bigger"
+} else {
+  println "less"
+}
+
+assert {
+  id {
+    if false { 100 + 200 } else { 2 + 3 }
+  } == id {
+    type u32 5
+  }
+}

@@ -1,0 +1,18 @@
+# A label declared inside (do) remains globally visible.
+do {
+  var "counter" 0
+
+  label "loop"
+
+  set "counter" { counter + 1 }
+
+  if counter < 5 {
+    goto loop
+  } else {
+    id counter
+  }
+}
+
+assert { counter == 5; id "Final counter value must be 5" }
+id counter
+# Result: SYM_VARIABLE(TYPE_U32(5))

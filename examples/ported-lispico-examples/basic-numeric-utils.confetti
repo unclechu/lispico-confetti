@@ -1,0 +1,84 @@
+# (abs) — u32
+assert { abs 0 == 0 }
+assert { abs 123 == 123 }
+assert { abs 4_294_967_295 == 4_294_967_295 }
+
+# (abs) — i32
+assert { abs -42 == type i32 42 }
+assert { abs { type i32 42 } == type i32 42 }
+assert { abs { type i32 0 } == type i32 0 }
+
+# (abs) — f32
+assert { abs -3.5 == 3.5 }
+assert { abs 3.5 == 3.5 }
+assert { abs -0.0 == 0.0 }
+
+# (min) and (max) — u32
+assert { min 3 7 == 3 }
+assert { max 3 7 == 7 }
+assert { min 7 3 == 3 }
+assert { max 7 3 == 7 }
+assert { min 5 5 == 5 }
+assert { max 5 5 == 5 }
+
+# (min) and (max) — i32
+assert { min -10 -20 == -20 }
+assert { max -10 -20 == -10 }
+
+# (min) and (max) — f32
+assert { min 1.5 2.5 == 1.5 }
+assert { max 1.5 2.5 == 2.5 }
+
+# (clamp) — u32
+assert { clamp 5 0 10 == 5 }
+assert { clamp 15 0 10 == 10 }
+assert { clamp 0 5 10 == 5 }
+assert { clamp 5 5 5 == 5 }
+
+# (clamp) — i32
+assert { clamp -20 -10 -5 == -10 }
+assert { clamp -7 -10 -5 == -7 }
+assert { clamp -2 -10 -5 == -5 }
+
+# (clamp) — f32
+assert { clamp 1.5 0.5 2.5 == 1.5 }
+assert { clamp -1.5 0.5 2.5 == 0.5 }
+assert { clamp 3.5 0.5 2.5 == 2.5 }
+assert { clamp -2. -10. -5. == -5. }
+
+# Return types are preserved
+assert { type-of { abs -42 } == i32 }
+assert { type-of { min 3 7 } == u32 }
+assert { type-of { max 1.5 2.5 } == f32 }
+assert { type-of { clamp -7 -10 -5 } == i32 }
+
+# (min) — Variable number of arguments
+assert { min 42 == 42 }
+assert { min 5 3 7 1 2 == 1 }
+assert { min 9 8 7 6 5 4 3 2 1 == 1 }
+assert { min 5 5 5 5 == 5 }
+assert { min 4_294_967_295 0 123 == 0 }
+
+# (max) — Variable number of arguments
+assert { max 42 == 42 }
+assert { max 5 3 7 1 2 == 7 }
+assert { max 1 2 3 4 5 6 7 8 9 == 9 }
+assert { max 5 5 5 5 == 5 }
+assert { max 0 4_294_967_295 123 == 4_294_967_295 }
+
+# Signed integers
+assert { min -5 -10 -3 -20 == -20 }
+assert { max -5 -10 -3 -20 == -3 }
+assert { min -42 == -42 }
+assert { max -42 == -42 }
+
+# Floating-point numbers
+assert { min 3.5 1.5 2.5 4.5 == 1.5 }
+assert { max 3.5 1.5 2.5 4.5 == 4.5 }
+assert { min -1.5 == -1.5 }
+assert { max -1.5 == -1.5 }
+
+# Return types are preserved
+assert { type-of { min 1 2 3 } == u32 }
+assert { type-of { max -1 -2 -3 } == i32 }
+assert { type-of { min 1.0 2.0 3.0 } == f32 }

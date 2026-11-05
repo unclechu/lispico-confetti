@@ -1,0 +1,42 @@
+# Top-level depth
+assert { id {depth} == 0 }
+
+# Nested sequences
+do {
+  assert { id { depth } == 1 }
+
+  do {
+    assert { id { depth } == 2 }
+
+    do { assert { id { depth } == 3 } }
+
+    assert { id { depth } == 2 }
+  }
+
+  assert { id { depth } == 1 }
+}
+
+assert { id { depth } == 0 }
+
+# Other special forms don’t introduce new sequence levels
+assert { id { if true { depth } else { id 123 } } == 0 }
+assert { true && { id { depth } == 0 } }
+assert { false || { id { depth } == id 0 } }
+
+# Check depth after jumping into a previously completed nested sequence
+var "counter" 0
+
+do {
+  do {
+    label "deep"
+    assert { id { depth } == 2 }
+    set "counter" { counter + 1 }
+  }
+}
+
+assert { id { depth } == 0 }
+
+if counter < 2 { goto deep }
+
+assert { counter == 2 }
+assert { id { depth } == 0 }

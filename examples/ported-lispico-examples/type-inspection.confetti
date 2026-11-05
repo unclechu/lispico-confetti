@@ -1,0 +1,32 @@
+# Primitive types
+assert { type-of 123 == u32 }
+assert { type-of -123 == i32 }
+assert { type-of 123. == f32 }
+assert { type-of true == u32 }
+assert { type-of false == u32 }
+assert { type-of "foo" == s }
+
+# Empty evaluation result
+assert { type-of { if false { id 123 } } == void }
+
+# Variable types
+var "foo" 123
+assert { type-of foo == u32 }
+
+# Kinds of registered names
+assert { kind-of "unknown" == empty-kind }
+assert { kind-of "u32" == var-kind }
+assert { kind-of "foo" == var-kind }
+assert { kind-of "+" == native-fn-kind }
+assert { kind-of "type-of" == native-fn-kind }
+assert { kind-of "kind-of" == native-fn-kind }
+
+# Special forms are not registered as native functions
+assert { kind-of "do" == empty-kind }
+assert { kind-of "if" == empty-kind }
+assert { kind-of "and" == empty-kind }
+assert { kind-of "or" == empty-kind }
+
+# Labels
+label "my-label"
+assert { kind-of "my-label" == label-kind }

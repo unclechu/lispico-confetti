@@ -1,0 +1,6 @@
+# Returning a partially filled array as an evaluation result
+arr-new "strings" s 5
+arr-set "strings" 0 "foo"
+arr-set "strings" 1 "bar"
+arr-set "strings" 2 "baz"
+id strings # The result is: SYM_ARRAY(ARRAY(TYPE_STRING, ["foo", "bar", "baz", "", ""]))

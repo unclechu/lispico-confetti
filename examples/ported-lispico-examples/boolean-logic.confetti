@@ -1,0 +1,36 @@
+# Basic conjunctions
+assert { id { true && true } == true }
+assert { id { true && true && true } == true }
+assert { id { true && false } == false }
+assert { id { true && false && true } == false }
+
+# Basic disjunctions
+assert { id { false || true } == true }
+assert { id { false || true || false } == true }
+assert { id { false || false } == false }
+assert { id { false || false || false } == false }
+
+# Zero and single arguments
+assert { id {&&} == true }
+assert { id {||} == false }
+assert { id {&& true} == true }
+assert { id {&& false} == false }
+assert { id {|| true} == true }
+assert { id {|| false} == false }
+
+# Numeric truthiness
+assert { id { 123 && -1 && 0.5 } == true }
+assert { id { 0 || 0.0 || 42 } == true }
+assert { id { 123 && 0 } == false }
+
+# Short-circuiting skips invalid arguments
+assert { id { false && "hello" } == false }
+assert { id { true || "hello" } == true }
+
+# Short-circuiting skips expressions with side effects
+assert { id { false && { exit 1 "unexpected" } } == false }
+assert { id { true || { exit 1 "unexpected" } } == true }
+
+# Nested boolean expressions
+assert { id { false || true } && { true && true } }
+assert { id { id { true && false } || { true && true } } == true }

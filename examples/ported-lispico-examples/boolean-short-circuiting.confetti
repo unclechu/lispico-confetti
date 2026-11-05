@@ -1,0 +1,7 @@
+label "start"
+
+# `(goto)` should not be evaluated because `(and)` and `(or)` are
+# short-circuiting after the first argument. Otherwise the program would loop
+# indefinitely.
+assert { id { false && { goto start } } == false }
+assert { id { true || { goto start } } == true }
