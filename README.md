@@ -576,6 +576,8 @@ augroup END
 - `i = 0` pseudo-function alias for `set "i" 0`
 - `foo[n]` pseudo-function alias for `arr-get "foo" n`
 - `foo[n] = x` pseudo-function alias for `arr-set "foo" n x`
+- `$foo[n]` pseudo-function alias for `str-get "foo" n`
+- `$foo[n] = x` pseudo-function alias for `str-set "foo" n x`
 
 ## License
 
