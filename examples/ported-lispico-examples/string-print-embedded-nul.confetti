@@ -1,0 +1,2 @@
+# Render the ten NUL bytes created by str-new without truncating the output.
+str-new "foo" 10
