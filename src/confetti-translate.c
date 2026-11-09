@@ -215,6 +215,66 @@ static bool translate_bare_atom(
   );
 }
 
+// The square brackets and `$` are ordinary Confetti argument characters.
+// Recognize only a single, unquoted NAME[INDEX] or $NAME[INDEX] argument.
+// Empty [] means its index comes from an adjacent native Confetti block.
+typedef struct {
+  const char *name;
+  size_t name_length;
+  const char *index_text;
+  size_t index_length;
+  bool is_string;
+  bool block_index;
+} IndexedArgument;
+
+static bool parse_indexed_argument(
+  const ConfettiTranslator *translator,
+  const conf_argument *argument,
+  IndexedArgument *result
+) {
+  if (
+    (argument == NULL || argument->value == NULL || argument->is_expression) ||
+    argument->lexeme_offset >= translator->source_length ||
+    // Quoted strings/arguments indicating this is a regular string literal
+    translator->source[argument->lexeme_offset] == '"'
+  ) return false;
+
+  const char *text = argument->value;
+  size_t length = strlen(text);
+  if (length < 3 || text[length - 1] != ']') return false;
+
+  const char *opening = strchr(text, '[');
+  if (
+    (opening == NULL || strchr(opening + 1, '[') != NULL) ||
+    strchr(opening, ']') != text + length - 1
+  ) return false;
+
+  bool is_string = text[0] == '$';
+  const char *name = text + (is_string ? 1 : 0);
+  size_t name_length = (size_t)(opening - name);
+  if (name_length == 0 || name_length >= SYMBOL_NAME_SIZE) return false;
+
+  *result = (IndexedArgument) {
+    .name = name,
+    .name_length = name_length,
+    .index_text = opening + 1,
+    .index_length = (size_t)(text + length - 1 - (opening + 1)),
+    .is_string = is_string,
+    .block_index = opening[1] == ']',
+  };
+
+  return true;
+}
+
+static bool translate_indexed_operation(
+  ConfettiTranslator *translator,
+  const IndexedArgument *target,
+  const conf_directive *index_block,
+  const conf_directive *assignment,
+  long assignment_value_start,
+  uint32_t *index
+);
+
 static bool translate_argument(
   ConfettiTranslator *translator,
   const conf_argument *argument,
@@ -236,13 +296,14 @@ static bool translate_argument(
   // Confetti by itself does not provide this information, so inspecting
   // original source `lexeme_offset` value to see the quotation mark.
   if (translator->source[argument->lexeme_offset] == '"') {
-    return translate_string_value(
-      translator, text, length, argument->lexeme_offset, index
-    );
+    return translate_string_value(translator, text, length, argument->lexeme_offset, index);
   } else {
-    return translate_bare_atom(
-      translator, text, length, argument->lexeme_offset, index
-    );
+    IndexedArgument indexed = {0};
+    if (parse_indexed_argument(translator, argument, &indexed)) {
+      return translate_indexed_operation(translator, &indexed, NULL, NULL, 0, index);
+    } else {
+      return translate_bare_atom(translator, text, length, argument->lexeme_offset, index);
+    }
   }
 }
 
@@ -514,6 +575,128 @@ static bool translate_infix_argument_span(
     snprintf(*translator->error, ERR_MSG_SIZE, "Expected a function name at operand start");
     return false;
   }
+  return true;
+}
+
+// Construct a Lispico string literal directly from a bare symbol name.
+// This must not go through Lispico's quoted-string escape decoder.
+static bool new_symbol_string(
+  ConfettiTranslator *translator,
+  const char *name,
+  size_t length,
+  uint32_t *index
+) {
+  if (length == 0 || length >= SYMBOL_NAME_SIZE) {
+    snprintf(*translator->error, ERR_MSG_SIZE, "Invalid indexed or assignment symbol name");
+    return false;
+  }
+  if (!new_expression(translator, EXPR_STRING, index)) return false;
+  return store_text(
+    translator,
+    name,
+    length,
+    &translator->interpreter->storage.expressions[*index].data
+  );
+}
+
+// Interpret the right-hand side as one expression. A bare atom is a value,
+// several inline arguments form a function call, and a native block supplies
+// one full expression. This also handles `= str-char "A"` and `= {x + 1}`.
+static bool translate_assignment_rhs(
+  ConfettiTranslator *translator,
+  const conf_directive *directive,
+  long first,
+  uint32_t *index
+) {
+  long count = conf_get_argument_count(directive);
+  bool has_block = has_directive_block(translator, directive);
+  if (first == count && has_block)
+    return translate_single_block(translator, directive, index);
+  if (first >= count) {
+    snprintf(*translator->error, ERR_MSG_SIZE, "Assignment is missing a value");
+    return false;
+  }
+  return translate_infix_argument_span(translator, directive, first, count, has_block, index);
+}
+
+// Lower foo[n], $foo[n], foo[] {EXPR}, or their assignment forms to
+// (arr-get/arr-set "foo" INDEX [VALUE]) or (str-get/str-set ...).
+static bool translate_indexed_operation(
+  ConfettiTranslator *translator,
+  const IndexedArgument *target,
+  const conf_directive *index_block,
+  const conf_directive *assignment,
+  long assignment_value_start,
+  uint32_t *index
+) {
+  if (target->block_index != (index_block != NULL)) {
+    snprintf(
+      *translator->error,
+      ERR_MSG_SIZE,
+      target->block_index
+        ? "Indexed access requires a { … } index block"
+        : "Indexed access already has an index inside brackets"
+    );
+    return false;
+  }
+
+  if (!new_expression(translator, EXPR_LIST, index)) return false;
+  uint32_t previous = EXPR_NONE;
+  uint32_t child = EXPR_NONE;
+  const char *fn_name =
+    assignment != NULL
+    ? (target->is_string ? "str-set" : "arr-set")
+    : (target->is_string ? "str-get" : "arr-get");
+  if (!new_name(translator, fn_name, &child)) return false;
+  append_child(translator->interpreter, *index, &previous, child);
+
+  if (!new_symbol_string(translator, target->name, target->name_length, &child)) return false;
+  append_child(translator->interpreter, *index, &previous, child);
+
+  if (index_block != NULL) {
+    if (!translate_single_block(translator, index_block, &child)) return false;
+  } else if (
+    !translate_bare_atom(translator, target->index_text, target->index_length, 0, &child)
+  ) return false;
+  append_child(translator->interpreter, *index, &previous, child);
+
+  if (assignment != NULL) {
+    if (
+      !translate_assignment_rhs(translator, assignment, assignment_value_start, &child)
+    ) return false;
+    append_child(translator->interpreter, *index, &previous, child);
+  }
+  return true;
+}
+
+// Lower NAME = VALUE. An indexed left-hand side uses the operation above.
+// The left-hand name is data, not a reference to the variable's current value.
+static bool translate_scalar_assignment(
+  ConfettiTranslator *translator,
+  const conf_directive *directive,
+  uint32_t *index
+) {
+  const conf_argument *name = conf_get_argument(directive, 0);
+  if (
+    (name == NULL || name->value == NULL || name->is_expression) ||
+    name->lexeme_offset >= translator->source_length ||
+    translator->source[name->lexeme_offset] == '"'
+  ) {
+    snprintf(*translator->error, ERR_MSG_SIZE, "Assignment expects a bare symbol name");
+    return false;
+  }
+
+  if (!new_expression(translator, EXPR_LIST, index)) return false;
+  uint32_t previous = EXPR_NONE;
+  uint32_t child = EXPR_NONE;
+  if (!new_name(translator, "set", &child)) return false;
+  append_child(translator->interpreter, *index, &previous, child);
+
+  if (!new_symbol_string(translator, name->value, strlen(name->value), &child)) return false;
+  append_child(translator->interpreter, *index, &previous, child);
+
+  if (!translate_assignment_rhs(translator, directive, 2, &child)) return false;
+  append_child(translator->interpreter, *index, &previous, child);
   return true;
 }
 
@@ -1018,10 +1201,29 @@ static bool translate_sequence_item(
   long count = conf_get_directive_count(container);
   const conf_directive *next = *position + 1 < count
     ? conf_get_directive(container, *position + 1) : NULL;
+
+  // A computed-index assignment is two adjacent native Confetti directives:
+  // `foo[] {i * 2} = 42` or `foo[] {i * 2} = {x + 1}`.
+  // The first directive owns the index block; the second supplies the value.
+  IndexedArgument indexed = {0};
+  if (
+    parse_indexed_argument(translator, first, &indexed) &&
+    indexed.block_index &&
+    has_directive_block(translator, directive) &&
+    next != NULL &&
+    is_bare_argument(translator, conf_get_argument(next, 0), "=")
+  ) {
+    if (!translate_indexed_operation(translator, &indexed, directive, next, 1, index))
+      return false;
+    *position += 2;
+    return true;
+  }
+
   const conf_argument *next_operator = next == NULL ? NULL : conf_get_argument(next, 0);
-  bool next_has_id_marker = next != NULL && is_bare_argument(
-    translator, conf_get_argument(next, 1), "id"
-  ) && (conf_get_argument_count(next) > 2 || has_directive_block(translator, next));
+  bool next_has_id_marker =
+    next != NULL &&
+    is_bare_argument(translator, conf_get_argument(next, 1), "id") &&
+    (conf_get_argument_count(next) > 2 || has_directive_block(translator, next));
   bool next_has_inline_pairs = has_inline_operator_pairs(translator, next);
   if (
     (is_bare_argument(translator, first, "id") ||
@@ -1089,6 +1291,32 @@ static bool translate_directive(
   // Standalone `do` consumes all of its subdirectives as a single sequence.
   if (count == 1 && has_block && is_bare_argument(translator, first, "do"))
     return translate_sequence_block(translator, directive, index);
+
+  IndexedArgument indexed = {0};
+  bool has_index = parse_indexed_argument(translator, first, &indexed);
+
+  // Assignment has its own translation path: the left-hand name must become
+  // a literal string, and an indexed target selects arr-set or str-set.
+  if (count >= 2 && is_bare_argument(translator, conf_get_argument(directive, 1), "=")) {
+    if (has_index) {
+      return translate_indexed_operation(translator, &indexed, NULL, directive, 2, index);
+    } else {
+      return translate_scalar_assignment(translator, directive, index);
+    }
+  }
+
+  // An indexed argument by itself is an expression, not a function call.
+  // A computed [] index takes exactly one nested Confetti expression.
+  if (count == 1 && has_index) {
+    return translate_indexed_operation(
+      translator,
+      &indexed,
+      has_block ? directive : NULL,
+      NULL,
+      0,
+      index
+    );
+  }
 
   if (count > 1) {
     const conf_argument *second = conf_get_argument(directive, 1);

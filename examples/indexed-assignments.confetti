@@ -1,0 +1,50 @@
+# Scalar assignment preserves the existing variable's type.
+var "i" 0
+i = 1
+assert {i == 1}
+
+var "x" 42
+arr-new "foo" u32 10
+
+# Simple numeric and variable indices.
+foo[0] = 42
+assert {foo[0] == 42}
+foo[i] = 69
+assert {foo[i] == 69}
+assert {foo[0] == 42}
+assert {foo[1] == 69}
+
+# A native subdirective block supplies a computed index. Assignment to it
+# continues with the next native `=` directive, even on the same source line.
+foo[] {i * 2} = 42
+assert {foo[2] == 42}
+foo[] {i * 2} = {x + 1}
+assert {foo[] {i * 2} == 43}
+var "selected" {foo[] {i * 2}}
+assert {selected == 43}
+
+str-new "text" 10
+$text[0] = str-char "A"
+assert {$text[0] == 65}
+$text[i] = str-char "B"
+assert {$text[i] == 66}
+assert {$text[0] == 65}
+assert {$text[1] == 66}
+$text[] {i * 2} = str-char "C"
+assert {$text[2] == 67}
+$text[] {i * 2} = {str-char "B" + 1}
+assert {$text[] {i * 2} == 67}
+var "selected-byte" {$text[] {i * 2}}
+assert {selected-byte == 67}
+
+# A quoted indexed-looking name is still a string literal.
+assert {"foo[1]" == str "foo" "[" "1" "]"}
+
+# An indexed read can be used as any other argument or infix operand.
+assert {id {foo[i] + 1} == 70}
+assert {id {str-char "B" + 1} == $text[2]}
+
+# A grouped expression is an assignment value, not additional set arguments.
+i = {1 + 2}
+assert {i == 3}
+id i

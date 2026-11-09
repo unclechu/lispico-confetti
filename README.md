@@ -85,6 +85,11 @@ directives and their arguments as Lispico expressions:
 | `1 && 0 && 1`             | `(and 1 0 1)`        | Short-circuit logical AND                     |
 | `0 \|\| 1 \|\| 0`         | `(or 0 1 0)`         | Short-circuit logical OR                      |
 | `do { … }`                | `(do …)`             | Explicit sequence                             |
+| `i = 0`                   | `(set "i" 0)`        | Set an existing variable                      |
+| `foo[n]`                  | `(arr-get "foo" n)`  | Read an array element                         |
+| `foo[n] = x`              | `(arr-set "foo" n x)`| Write an array element                        |
+| `$foo[n]`                 | `(str-get "foo" n)`  | Read a string byte                            |
+| `$foo[n] = x`             | `(str-set "foo" n x)`| Write a string byte/range                     |
 
 Quoted arguments represent string literals, while bare names represent
 symbol references. Numeric arguments use Lispico’s existing numeric parser.
@@ -101,6 +106,60 @@ println "name"
 (println name)
 (println "name")
 ```
+
+### Assignment and indexed access
+
+Assignment is translated into Lispico’s existing `(set)`, `(arr-set)`, or
+`(str-set)` functions. It does not create new variables; use `(var)` first.
+The assignment target becomes a **string name**, not a reference to the
+target’s current value:
+
+```confetti
+var "i" 0
+arr-new "numbers" u32 10
+str-new "text" 10
+
+i = 1
+numbers[1] = 42
+numbers[i] = 42
+$text[i] = str-char "A"
+```
+
+An index written inside brackets is one bare numeric literal or variable
+reference. Use **empty brackets and a trailing native Confetti block** for a
+computed index; the block must contain exactly one logical expression:
+
+```confetti
+numbers[] {i * 2}
+numbers[] {i * 2} = 42
+numbers[] {i * 2} = {i + 1}
+
+$text[] {i * 2}
+$text[] {i * 2} = str-char "A"
+$text[] {i * 2} = {str-char "A" + 1}
+```
+
+The second line becomes `(arr-set "numbers" (* i 2) 42)`; the last line
+becomes `(str-set "text" (* i 2) (+ (str-char "A") 1))`.
+Confetti represents `numbers[] {i * 2} = 42` as **two adjacent directives**:
+the first carries the index block, and the second begins with `=` and supplies
+the value. The translator combines them, similarly to its existing operator
+continuations. No new expression parser is introduced.
+
+Indexed reads are valid wherever a normal value is accepted:
+
+```confetti
+assert {numbers[i] == 42}
+assert {numbers[] {i * 2} == 42}
+assert {$text[i] == str-char "A"}
+```
+
+`$text[i]` returns a `u32` **byte**, not a one-character string, matching
+`(str-get)`. An indexed assignment inherits the destination function’s type
+and bounds checks. Quoted names retain their literal meaning: explicit
+`arr-get "foo[1]" 0` can still access an array whose name contains brackets.
+To compute an assignment’s right-hand side, use `{ … }` grouping, for example
+`i = {1 + 2}`. Mixed ungrouped operators have no implicit precedence.
 
 ### Native argument blocks and infix operators
 
@@ -570,14 +629,6 @@ augroup lispico_confetti_ale
     \ let b:ale_linters = ['lispico_confetti_cc']
 augroup END
 ```
-
-## TODO
-
-- `i = 0` pseudo-function alias for `set "i" 0`
-- `foo[n]` pseudo-function alias for `arr-get "foo" n`
-- `foo[n] = x` pseudo-function alias for `arr-set "foo" n x`
-- `$foo[n]` pseudo-function alias for `str-get "foo" n`
-- `$foo[n] = x` pseudo-function alias for `str-set "foo" n x`
 
 ## License
 
