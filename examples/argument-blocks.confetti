@@ -9,8 +9,8 @@ var "with-inline" {str "A" {id "B"; id "C"}}
 assert {with-inline == "ABC"}
 
 # Empty argument blocks and a bare function name both pass no arguments.
-var "empty" {str {}}
-assert {empty == ""}
+var "empty-str-var" {str {}}
+assert {empty-str-var == ""}
 
 # An explicit `do` groups any number of expressions into one argument.
 var "sequence-result" {str do {

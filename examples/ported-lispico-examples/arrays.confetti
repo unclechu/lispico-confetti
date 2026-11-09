@@ -48,9 +48,9 @@ assert { arr-get "words" 0 == "Bye" }
 assert { str-size { arr-get "words" 2 } == 0 }
 
 # Zero-length arrays are allowed
-arr-new "empty" u32 0
-assert { arr-size "empty" == 0 }
-assert { arr-type "empty" == u32 }
+arr-new "empty-array" u32 0
+assert { arr-size "empty-array" == 0 }
+assert { arr-type "empty-array" == u32 }
 
 # The array remains a distinct kind, not a scalar variable
 assert { kind-of "numbers" == arr-kind }

@@ -55,10 +55,10 @@ assert { str-char alphabet 0 == 0 }
 assert { str-char alphabet 6 == 0 }
 
 # Empty string variables can accept empty replacements
-var "empty" ""
-str-set "empty" ""
-str-set "empty" 0 ""
-assert { str-size empty == 0 }
+var "empty-string" ""
+str-set "empty-string" ""
+str-set "empty-string" 0 ""
+assert { str-size empty-string == 0 }
 
 # String variables must own independent copies
 var "first" "abc"
