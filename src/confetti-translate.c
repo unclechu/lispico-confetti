@@ -65,13 +65,21 @@ static bool store_text(
   }
 
   // Allocate a new string.
-  if (!allocate_expression_data(
-    interpreter, text, length + 1, TYPE_STRING, (uint32_t)length, allocation_index
-  )) {
+  if (
+    !allocate_expression_data(
+      interpreter,
+      text,
+      length + 1,
+      TYPE_STRING,
+      (uint32_t)length,
+      allocation_index
+    )
+  ) {
     snprintf(*translator->error, ERR_MSG_SIZE, "Unable to allocate expression text");
     return false;
+  } else {
+    return true;
   }
-  return true;
 }
 
 // Allocate new EXPR_NAME expression entry.
@@ -130,7 +138,8 @@ static bool translate_string_value(
             *translator->error,
             ERR_MSG_SIZE,
             "Unknown Lispico string escape “\\%c” in argument starting at byte %zu",
-            value[i], byte_offset
+            value[i],
+            byte_offset
           );
           return false;
       }
@@ -317,7 +326,7 @@ static bool is_bare_argument(
   const char *name
 ) {
   return (
-    argument != NULL && argument->value != NULL && !argument->is_expression &&
+    (argument != NULL && argument->value != NULL && !argument->is_expression) &&
     argument->lexeme_offset < translator->source_length &&
     translator->source[argument->lexeme_offset] != '"' &&
     strcmp(argument->value, name) == 0
@@ -431,9 +440,9 @@ static bool append_infix_operand(InfixCall *call, uint32_t operand) {
 
     call->previous_child = EXPR_NONE;
     uint32_t operator_index = EXPR_NONE;
-    if (!new_name(
-      translator, lispico_operator_name(call->operator_name), &operator_index
-    )) return false;
+    if (
+      !new_name(translator, lispico_operator_name(call->operator_name), &operator_index)
+    ) return false;
     append_child(interpreter, call->expression, &call->previous_child, operator_index);
     append_child(interpreter, call->expression, &call->previous_child, inner_index);
     call->operands = 1;
@@ -473,7 +482,8 @@ static bool has_directive_block(
   if (count <= 0) return false;
   const conf_argument *last = conf_get_argument(directive, count - 1);
   if (
-    last == NULL || last->lexeme_offset > translator->source_length ||
+    last == NULL ||
+    last->lexeme_offset > translator->source_length ||
     last->lexeme_length > translator->source_length - last->lexeme_offset
   ) return false;
 
@@ -579,7 +589,7 @@ static bool translate_infix_argument_span(
 }
 
 // Construct a Lispico string literal directly from a bare symbol name.
-// This must not go through Lispico's quoted-string escape decoder.
+// This must not go through Lispico’s quoted-string escape decoder.
 static bool new_symbol_string(
   ConfettiTranslator *translator,
   const char *name,
@@ -670,7 +680,7 @@ static bool translate_indexed_operation(
 }
 
 // Lower NAME = VALUE. An indexed left-hand side uses the operation above.
-// The left-hand name is data, not a reference to the variable's current value.
+// The left-hand name is data, not a reference to the variable’s current value.
 static bool translate_scalar_assignment(
   ConfettiTranslator *translator,
   const conf_directive *directive,
@@ -724,9 +734,10 @@ static bool append_operator_continuation(
     // An explicit `id` before an operand is optional. This is useful for
     // continuations such as `id {gc} == id 0`, where Confetti puts the
     // operator and its right-hand operand in one native directive.
-    bool explicit_id = i < argument_count && is_bare_argument(
-      translator, conf_get_argument(directive, i), "id"
-    ) && (i + 1 < argument_count || has_block);
+    bool explicit_id =
+      i < argument_count &&
+      is_bare_argument(translator, conf_get_argument(directive, i), "id") &&
+      (i + 1 < argument_count || has_block);
     if (explicit_id) ++i;
 
     uint32_t operand = EXPR_NONE;
@@ -735,7 +746,9 @@ static bool append_operator_continuation(
       if (!explicit_id) {
         const conf_argument *first = conf_get_argument(directive, i);
         if (
-          first != NULL && first->value != NULL && is_operator(first->value) &&
+          first != NULL &&
+          first->value != NULL &&
+          is_operator(first->value) &&
           is_bare_argument(translator, first, first->value)
         ) {
           snprintf(*translator->error, ERR_MSG_SIZE, "Infix operator is missing an operand");
@@ -747,7 +760,9 @@ static bool append_operator_continuation(
         while (end < argument_count) {
           const conf_argument *next = conf_get_argument(directive, end);
           if (
-            next != NULL && next->value != NULL && is_operator(next->value) &&
+            next != NULL &&
+            next->value != NULL &&
+            is_operator(next->value) &&
             is_bare_argument(translator, next, next->value)
           ) break;
           ++end;
@@ -758,14 +773,15 @@ static bool append_operator_continuation(
       bool include_block = end == argument_count && has_block;
       if (include_block && explicit_id) {
         snprintf(
-          *translator->error, ERR_MSG_SIZE,
+          *translator->error,
+          ERR_MSG_SIZE,
           "`id` expects one argument or one expression block"
         );
         return false;
       }
-      if (!translate_infix_argument_span(
-        translator, directive, i, end, include_block, &operand
-      )) return false;
+      if (
+        !translate_infix_argument_span(translator, directive, i, end, include_block, &operand)
+      ) return false;
       i = end;
     } else if (has_block) {
       // The final block may contribute multiple operands to a chainable
@@ -794,7 +810,8 @@ static bool begins_operator_continuation(
 ) {
   const conf_argument *first = conf_get_argument(directive, 0);
   if (
-    first == NULL || first->value == NULL ||
+    first == NULL ||
+    first->value == NULL ||
     !is_operator(first->value) ||
     !is_bare_argument(translator, first, first->value)
   ) return false;
@@ -802,10 +819,9 @@ static bool begins_operator_continuation(
   long count = conf_get_argument_count(directive);
   if (has_directive_block(translator, directive)) count++;
   return (
-    count == 1 || (count >= 2 && count % 2 == 0) ||
-    (count >= 3 && is_bare_argument(
-      translator, conf_get_argument(directive, 1), "id"
-    ))
+    count == 1 ||
+    (count >= 2 && count % 2 == 0) ||
+    (count >= 3 && is_bare_argument(translator, conf_get_argument(directive, 1), "id"))
   );
 }
 
@@ -823,7 +839,8 @@ static bool has_inline_operator_pairs(
   for (long i = 2; i < count; i += 2) {
     const conf_argument *argument = conf_get_argument(directive, i);
     if (
-      argument == NULL || argument->value == NULL ||
+      argument == NULL ||
+      argument->value == NULL ||
       !is_operator(argument->value) ||
       !is_bare_argument(translator, argument, argument->value)
     ) return false;
@@ -849,7 +866,8 @@ static bool translate_single_block(
   if (position == count) return true;
 
   snprintf(
-    *translator->error, ERR_MSG_SIZE,
+    *translator->error,
+    ERR_MSG_SIZE,
     "Block contains multiple expressions; use `do { … }` for a single sequence"
   );
   return false;
@@ -869,8 +887,7 @@ static bool translate_sequence_block(
   long count = conf_get_directive_count(directive);
   for (long i = 0; i < count;) {
     uint32_t child = EXPR_NONE;
-    if (!translate_sequence_item(translator, directive, &i, &child))
-      return false;
+    if (!translate_sequence_item(translator, directive, &i, &child)) return false;
     append_child(translator->interpreter, *index, &previous, child);
   }
   return true;
@@ -891,7 +908,8 @@ static bool translate_id_directive(
     return translate_single_block(translator, directive, index);
 
   snprintf(
-    *translator->error, ERR_MSG_SIZE,
+    *translator->error,
+    ERR_MSG_SIZE,
     "`id` expects one argument or one expression block"
   );
   return false;
@@ -905,8 +923,9 @@ static bool translate_infix_directive(
   const char *operator_name,
   uint32_t *index
 ) {
-  long total = conf_get_argument_count(directive) +
-    (has_directive_block(translator, directive) ? 1 : 0);
+  long total =
+    conf_get_argument_count(directive)
+    + (has_directive_block(translator, directive) ? 1 : 0);
   if (total < 3) {
     snprintf(*translator->error, ERR_MSG_SIZE, "Infix operator is missing an operand");
     return false;
@@ -944,8 +963,7 @@ static bool translate_call_with_operator_suffix(
   uint32_t previous = EXPR_NONE;
   for (long i = 0; i < operator_position; ++i) {
     uint32_t argument = EXPR_NONE;
-    if (!translate_argument(translator, conf_get_argument(directive, i), &argument))
-      return false;
+    if (!translate_argument(translator, conf_get_argument(directive, i), &argument)) return false;
     append_child(translator->interpreter, function, &previous, argument);
   }
 
@@ -955,9 +973,7 @@ static bool translate_call_with_operator_suffix(
     return false;
   }
   if (!append_infix_operand(&call, function)) return false;
-  if (!append_operator_continuation(
-    translator, directive, &call, operator_position
-  )) return false;
+  if (!append_operator_continuation(translator, directive, &call, operator_position)) return false;
 
   *index = call.expression;
   return true;
@@ -978,7 +994,8 @@ static bool translate_condition_arguments(
 
   if (count < 3 || count % 2 == 0) {
     snprintf(
-      *translator->error, ERR_MSG_SIZE,
+      *translator->error,
+      ERR_MSG_SIZE,
       "`if` expects one condition or a homogeneous infix condition; use { … } for a call"
     );
     return false;
@@ -986,12 +1003,14 @@ static bool translate_condition_arguments(
 
   const conf_argument *operator_arg = conf_get_argument(directive, first + 1);
   if (
-    operator_arg == NULL || operator_arg->value == NULL ||
+    operator_arg == NULL ||
+    operator_arg->value == NULL ||
     !is_operator(operator_arg->value) ||
     !is_bare_argument(translator, operator_arg, operator_arg->value)
   ) {
     snprintf(
-      *translator->error, ERR_MSG_SIZE,
+      *translator->error,
+      ERR_MSG_SIZE,
       "Unsupported condition; use a single infix operator or { … } for a call"
     );
     return false;
@@ -1001,13 +1020,13 @@ static bool translate_condition_arguments(
   if (!start_infix_call(&call, translator, operator_arg->value)) return false;
 
   for (long i = first; i < end; i += 2) {
-    if (i != first && !check_infix_operator(
-      translator, conf_get_argument(directive, i - 1), call.operator_name
-    )) return false;
+    if (
+      i != first &&
+      !check_infix_operator(translator, conf_get_argument(directive, i - 1), call.operator_name)
+    ) return false;
 
     uint32_t operand = EXPR_NONE;
-    if (!translate_argument(translator, conf_get_argument(directive, i), &operand))
-      return false;
+    if (!translate_argument(translator, conf_get_argument(directive, i), &operand)) return false;
     if (!append_infix_operand(&call, operand)) return false;
   }
 
@@ -1044,7 +1063,7 @@ static bool translate_conditional_branch(
     return false;
   }
   if (sequence) return translate_sequence_block(translator, directive, index);
-  return translate_single_block(translator, directive, index);
+  else return translate_single_block(translator, directive, index);
 }
 
 // Confetti gives each directive only one trailing block. Thus
@@ -1068,7 +1087,8 @@ static bool translate_if_clause(
     ++*position;
     if (*position >= conf_get_directive_count(container)) {
       snprintf(
-        *translator->error, ERR_MSG_SIZE,
+        *translator->error,
+        ERR_MSG_SIZE,
         "A blocked `if` condition must be followed by `then { … }` or `do { … }`"
       );
       return false;
@@ -1106,23 +1126,25 @@ static bool translate_if_clause(
 
   long condition_end = argc;
   bool sequence = false;
-  if (condition_end > condition_start && is_bare_argument(
-    translator, conf_get_argument(clause, condition_end - 1), "do"
-  )) {
+  if (
+    condition_end > condition_start &&
+    is_bare_argument(translator, conf_get_argument(clause, condition_end - 1), "do")
+  ) {
     sequence = true;
     --condition_end;
   }
-  if (condition_end > condition_start && is_bare_argument(
-    translator, conf_get_argument(clause, condition_end - 1), "then"
-  )) --condition_end;
+  if (
+    condition_end > condition_start &&
+    is_bare_argument(translator, conf_get_argument(clause, condition_end - 1), "then")
+  ) --condition_end;
 
   if (condition_end == condition_start) {
     snprintf(*translator->error, ERR_MSG_SIZE, "`if` requires a condition");
     return false;
   }
-  if (!translate_condition_arguments(
-    translator, clause, condition_start, condition_end, condition
-  )) return false;
+  if (
+    !translate_condition_arguments(translator, clause, condition_start, condition_end, condition)
+  ) return false;
   if (!translate_conditional_branch(translator, clause, sequence, branch)) return false;
   ++*position;
   return true;
@@ -1144,9 +1166,7 @@ static bool translate_if_chain(
 
   uint32_t condition = EXPR_NONE;
   uint32_t branch = EXPR_NONE;
-  if (!translate_if_clause(
-    translator, container, position, 1, &condition, &branch
-  )) return false;
+  if (!translate_if_clause(translator, container, position, 1, &condition, &branch)) return false;
   append_child(translator->interpreter, current.expression, &current.previous_child, condition);
   append_child(translator->interpreter, current.expression, &current.previous_child, branch);
 
@@ -1160,20 +1180,21 @@ static bool translate_if_chain(
       ConditionalCall nested;
       if (!start_conditional_call(translator, &nested)) return false;
       append_child(
-        translator->interpreter, current.expression, &current.previous_child, nested.expression
+        translator->interpreter,
+        current.expression,
+        &current.previous_child,
+        nested.expression
       );
       current = nested;
-      if (!translate_if_clause(
-        translator, container, position, 2, &condition, &branch
-      )) return false;
+      if (
+        !translate_if_clause(translator, container, position, 2, &condition, &branch)
+      ) return false;
       append_child(translator->interpreter, current.expression, &current.previous_child, condition);
       append_child(translator->interpreter, current.expression, &current.previous_child, branch);
       continue;
     }
 
-    bool sequence = argc == 2 && is_bare_argument(
-      translator, conf_get_argument(next, 1), "do"
-    );
+    bool sequence = argc == 2 && is_bare_argument(translator, conf_get_argument(next, 1), "do");
     if (argc != 1 && !sequence) {
       snprintf(*translator->error, ERR_MSG_SIZE, "`else` expects a block or `do { … }`");
       return false;
@@ -1199,8 +1220,8 @@ static bool translate_sequence_item(
     return translate_if_chain(translator, container, position, index);
 
   long count = conf_get_directive_count(container);
-  const conf_directive *next = *position + 1 < count
-    ? conf_get_directive(container, *position + 1) : NULL;
+  const conf_directive *next =
+    *position + 1 < count ? conf_get_directive(container, *position + 1) : NULL;
 
   // A computed-index assignment is two adjacent native Confetti directives:
   // `foo[] {i * 2} = 42` or `foo[] {i * 2} = {x + 1}`.
@@ -1213,8 +1234,7 @@ static bool translate_sequence_item(
     next != NULL &&
     is_bare_argument(translator, conf_get_argument(next, 0), "=")
   ) {
-    if (!translate_indexed_operation(translator, &indexed, directive, next, 1, index))
-      return false;
+    if (!translate_indexed_operation(translator, &indexed, directive, next, 1, index)) return false;
     *position += 2;
     return true;
   }
@@ -1226,13 +1246,22 @@ static bool translate_sequence_item(
     (conf_get_argument_count(next) > 2 || has_directive_block(translator, next));
   bool next_has_inline_pairs = has_inline_operator_pairs(translator, next);
   if (
-    (is_bare_argument(translator, first, "id") ||
-     (has_directive_block(translator, directive) && next_operator != NULL &&
-      next_operator->value != NULL &&
-      conf_get_argument_count(next) >= 2 &&
-      (!is_chainable_operator(next_operator->value) || next_has_id_marker ||
-       next_has_inline_pairs))) &&
-    next != NULL && begins_operator_continuation(translator, next)
+    (
+      is_bare_argument(translator, first, "id") ||
+      (
+        has_directive_block(translator, directive) &&
+        next_operator != NULL &&
+        next_operator->value != NULL &&
+        conf_get_argument_count(next) >= 2 &&
+        (
+          !is_chainable_operator(next_operator->value) ||
+          next_has_id_marker ||
+          next_has_inline_pairs
+        )
+      )
+    ) &&
+    next != NULL &&
+    begins_operator_continuation(translator, next)
   ) {
     const char *operator_name = conf_get_argument(next, 0)->value;
     InfixCall call;
@@ -1245,13 +1274,16 @@ static bool translate_sequence_item(
 
     while (
       *position < count &&
-      begins_operator_continuation(
-        translator, conf_get_directive(container, *position)
-      )
+      begins_operator_continuation(translator, conf_get_directive(container, *position))
     ) {
-      if (!append_operator_continuation(
-        translator, conf_get_directive(container, *position), &call, 0
-      )) return false;
+      if (
+        !append_operator_continuation(
+          translator,
+          conf_get_directive(container, *position),
+          &call,
+          0
+        )
+      ) return false;
       ++*position;
     }
     *index = call.expression;
@@ -1351,9 +1383,7 @@ static bool translate_directive(
   long argument_count = count;
   bool explicit_do = false;
   if (has_block && count > 1) {
-    explicit_do = is_bare_argument(
-      translator, conf_get_argument(directive, count - 1), "do"
-    );
+    explicit_do = is_bare_argument(translator, conf_get_argument(directive, count - 1), "do");
     if (explicit_do) argument_count--;
   }
 
@@ -1361,12 +1391,12 @@ static bool translate_directive(
     uint32_t argument = EXPR_NONE;
     const conf_argument *item = conf_get_argument(directive, i);
     if (
-      i == 0 && item != NULL && item->value != NULL &&
-      (is_bare_argument(translator, item, "&&") ||
-       is_bare_argument(translator, item, "||"))
+      i == 0 &&
+      item != NULL &&
+      item->value != NULL &&
+      (is_bare_argument(translator, item, "&&") || is_bare_argument(translator, item, "||"))
     ) {
-      if (!new_name(translator, lispico_operator_name(item->value), &argument))
-        return false;
+      if (!new_name(translator, lispico_operator_name(item->value), &argument)) return false;
     } else if (!translate_argument(translator, item, &argument)) {
       return false;
     }
@@ -1390,8 +1420,7 @@ static bool translate_directive(
       long block_count = conf_get_directive_count(directive);
       for (long position = 0; position < block_count;) {
         uint32_t argument = EXPR_NONE;
-        if (!translate_sequence_item(translator, directive, &position, &argument))
-          return false;
+        if (!translate_sequence_item(translator, directive, &position, &argument)) return false;
         append_child(translator->interpreter, *index, &previous, argument);
       }
     }
@@ -1425,8 +1454,11 @@ bool parse_confetti_source(
   conf_unit *unit = conf_parse(source, NULL, &parse_error);
   if (unit == NULL) {
     snprintf(
-      *error, ERR_MSG_SIZE, "Confetti parse error at byte %zu: %s",
-      parse_error.where, parse_error.description
+      *error,
+      ERR_MSG_SIZE,
+      "Confetti parse error at byte %zu: %s",
+      parse_error.where,
+      parse_error.description
     );
     return false;
   }
@@ -1443,10 +1475,8 @@ bool parse_confetti_source(
   uint32_t previous = EXPR_NONE;
   for (long i = 0; i < count;) {
     uint32_t expression = EXPR_NONE;
-    if (!translate_sequence_item(&translator, root, &i, &expression))
-      goto fail;
-    if (previous != EXPR_NONE)
-      interpreter->storage.expressions[previous].next = expression;
+    if (!translate_sequence_item(&translator, root, &i, &expression)) goto fail;
+    if (previous != EXPR_NONE) interpreter->storage.expressions[previous].next = expression;
     previous = expression;
   }
 
