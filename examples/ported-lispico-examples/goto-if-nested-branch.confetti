@@ -1,0 +1,12 @@
+# Re-enter a label in a previously executed double-nested (if) branch.
+var "enter" true
+var "count" 0
+if enter do {
+  if enter do {
+    label "inside-double-if"
+    set "count" { count + 1 }
+    if count == 2 { exit 0 count }
+  }
+}
+set "enter" false
+goto inside-double-if

@@ -1,0 +1,3 @@
+# A native function invoked through (call) may request evaluation exit.
+call "exit" 0 99
+println "unreachable"

@@ -1,0 +1,28 @@
+# The query works for all symbol kinds and has no side effects.
+assert { is-frozen "assert" == false }
+
+var "number" 42
+var "text" "Hello"
+var "numbers" { arr 1 2 3 }
+label "checkpoint"
+
+assert { is-frozen "number" == false }
+assert { is-frozen "text" == false }
+assert { is-frozen "numbers" == false }
+assert { is-frozen "checkpoint" == false }
+
+freeze "number"
+freeze "text"
+freeze "numbers"
+freeze "checkpoint"
+
+assert { is-frozen "number" == true }
+assert { is-frozen "text" == true }
+assert { is-frozen "numbers" == true }
+assert { is-frozen "checkpoint" == true }
+
+# The query itself can also be frozen and remains callable.
+freeze "is-frozen"
+assert { is-frozen "is-frozen" == true }
+assert { is-frozen "assert" == false }
+is-frozen "number"

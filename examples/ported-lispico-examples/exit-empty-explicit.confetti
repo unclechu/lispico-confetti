@@ -1,0 +1,2 @@
+# An explicitly empty second argument is also accepted.
+exit 7 empty

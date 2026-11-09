@@ -1,0 +1,10 @@
+first print
+second print
+third print
+fifth print
+third print
+fourth print
+first print
+after this line it used to fail
+finished
+SYM_VARIABLE(TYPE_U32(2))

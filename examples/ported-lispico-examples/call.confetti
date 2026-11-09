@@ -1,0 +1,26 @@
+# Resolve ordinary native functions by an evaluated string name.
+assert { call "+" 1 2 3 == 6 }
+assert { call "str-size" "Hello" == 5 }
+assert { call { str "str-" "size"; id "Hello" } == 5 }
+
+var "function-name" "str-size"
+assert { call function-name "abcd" == 4 }
+assert { call "call" "str-size" "xy" == 2 }
+
+# The function name must remain GC-rooted while later arguments evaluate.
+assert { call { str "str-" "size"; do { gc; id "ABC" } } == 3 }
+
+# Freezing an existing function symbol does not prevent calling it.
+call "freeze" "str-size"
+assert { is-frozen "str-size" == 1 }
+assert { call "str-size" "abc" == 3 }
+
+# Forward the current expression location to native functions like label.
+var "visits" 0
+call "label" "again"
+set "visits" { visits + 1 }
+if visits < 2 { call "goto" again }
+assert { visits == 2 }
+
+call { str "print" "ln"; id "foo" }
+call "+" 1 2 3

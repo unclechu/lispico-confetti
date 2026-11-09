@@ -1,0 +1,11 @@
+# Re-enter a label in a previously executed (if) branch, even when the
+# condition has since changed. The exit guard prevents an infinite loop.
+var "enter" true
+var "count" 0
+if enter do {
+  label "inside-if"
+  set "count" { count + 1 }
+  if count == 2 { exit 0 count }
+}
+set "enter" false
+goto inside-if

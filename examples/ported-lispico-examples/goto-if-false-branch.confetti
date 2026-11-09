@@ -1,0 +1,12 @@
+# Re-enter the false branch after the condition switches to true.
+var "enter-true" false
+var "count" 0
+if enter-true {
+  println "unexpected true branch"
+} else do {
+  label "inside-else"
+  set "count" { count + 1 }
+  if count == 2 { exit 0 count }
+}
+set "enter-true" true
+goto inside-else

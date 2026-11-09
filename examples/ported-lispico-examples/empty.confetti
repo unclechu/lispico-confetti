@@ -1,0 +1,4 @@
+# `empty` is a literal result with no scalar Value payload.
+assert { type-of empty == void }
+assert { kind-of "empty" == empty-kind }
+id empty

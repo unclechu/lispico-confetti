@@ -1,0 +1,26 @@
+# Freezing symbols makes them immutable without preventing reads.
+var "number" 42
+var "message" "hello"
+var "numbers" { arr 1 2 3 }
+
+freeze "number"
+freeze "message"
+freeze "numbers"
+freeze "number" # Idempotent
+
+assert { number == 42 }
+assert { message == "hello" }
+assert { arr-get "numbers" 1 == 2 }
+
+# A frozen label may be re-evaluated at its original expression index.
+var "visits" 0
+label "again"
+freeze "again"
+set "visits" { visits + 1 }
+if visits < 3 { goto again }
+assert { visits == 3 }
+
+# Built-in functions can be frozen by the user and still called.
+freeze "assert"
+assert true
+id visits

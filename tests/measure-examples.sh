@@ -69,15 +69,16 @@ failed=0
 measure-example() {
   set -o errexit || exit; set -o errtrace; set -o nounset; set -o pipefail
 
-  if (( $# != 1 )); then
+  if (( $# != 2 )) || ! [[ -f $1 && -d $2 ]]; then
     >&2 printf \
-      '%s[CRITICAL FAIL]%s measure-example: Unexpected amount of arguments, expects exactly 1 but got: %d\n' \
-      "$E_FAIL_COLOR" "$E_RESET_COLOR" "$#"
+      '%s[CRITICAL FAIL]%s measure-example: Unexpected arguments, need a file and a directory \n' \
+      "$E_FAIL_COLOR" "$E_RESET_COLOR"
     return 1
   fi
 
   local SOURCE="$1"
   local NAME="${SOURCE#./}"
+  local EXPECTATIONS_DIR=$2
 
   local exit_code=0
   local elapsed=0
@@ -90,7 +91,16 @@ measure-example() {
 
   printf '%-70s %12s %14s %10d\n' "$NAME" "${elapsed} s" "${peak_ram} KiB" "$exit_code"
 
-  if (( exit_code == 0 )); then
+  # Read the expected exit code, defaulting to zero.
+  local example_name="${SOURCE##*/}"; example_name="${example_name%.confetti}"
+  local expected_file="${EXPECTATIONS_DIR}/${example_name}.exitcode"
+  local expected_exit_code=0
+
+  if [[ -f "$expected_file" ]]; then
+    expected_exit_code=$(< "$expected_file")
+  fi
+
+  if (( exit_code == expected_exit_code )); then
     (( passed += 1 ))
   else
     (( failed += 1 ))
@@ -112,12 +122,12 @@ shopt -s nullglob
 
 # Test all existing example programs
 for source in examples/*.confetti; do
-  measure-example "$source"
+  measure-example "$source" tests/expected-examples
 done
 
 # Test all ported Lispico examples
 for source in examples/ported-lispico-examples/*.confetti; do
-  measure-example "$source"
+  measure-example "$source" tests/expected-ported-lispico-examples
 done
 
 if (( failed != 0 )); then

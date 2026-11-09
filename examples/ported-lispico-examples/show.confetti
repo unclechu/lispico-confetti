@@ -1,0 +1,22 @@
+# The returned string matches the executable's final-result representation.
+assert { show empty == "SYM_EMPTY" }
+assert { show 123 == "SYM_VARIABLE(TYPE_U32(123))" }
+assert { show -42 == "SYM_VARIABLE(TYPE_I32(-42))" }
+assert { show 1.25 == "SYM_VARIABLE(TYPE_F32(1.250000))" }
+assert { show "foo" == "SYM_VARIABLE(TYPE_STRING(\"foo\"))" }
+
+# NULs and other special characters are escaped in the debug representation.
+assert { show "a\\0b" == "SYM_VARIABLE(TYPE_STRING(\"a\\\\0b\"))" }
+assert { show { arr 1 2 3 } == "SYM_ARRAY(ARRAY(TYPE_U32, [1, 2, 3]))" }
+assert { show { arr "x" "a\\0b" } == "SYM_ARRAY(ARRAY(TYPE_STRING, [\"x\", \"a\\\\0b\"]))" }
+
+# Labels have an internal expression index, which is intentionally unstable.
+label "here"
+assert { str-slice { show here; id 0; id 10 } == "SYM_LABEL(" }
+
+# The result is a normal, GC-managed string.
+var "rendered" { show { arr 10 20 } }
+gc
+assert { rendered == "SYM_ARRAY(ARRAY(TYPE_U32, [10, 20]))" }
+
+show 42

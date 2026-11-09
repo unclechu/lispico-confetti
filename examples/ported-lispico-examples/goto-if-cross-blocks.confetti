@@ -1,0 +1,40 @@
+# Re-entry across nested (do) blocks and (if) branches, including jumps
+# between two labels reached on earlier passes through their branches.
+var "i" 0
+
+do {
+  do {
+    label "one"
+    println "first print"
+    if { kind-of "one-return" == label-kind } do {
+      set "i" { i + 1 }
+      println "after this line it used to fail"
+      goto one-return
+    }
+  }
+}
+
+do {
+  do { println "second print" }
+  do {
+    label "second"
+    println "third print"
+    if { kind-of "second-return" == label-kind } do {
+      println "fourth print"
+      label "one-return"
+      if i == 0 {
+        goto one
+      } else do {
+        set "i" { i + 1 }
+        goto second-return
+      }
+    }
+  }
+}
+
+do { println "fifth print" }
+
+label "second-return"
+if i == 0 { goto second }
+println "finished"
+id i

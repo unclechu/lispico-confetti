@@ -1,0 +1,2 @@
+# A nonzero status also works when the result is omitted.
+exit 3

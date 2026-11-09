@@ -1,0 +1,6 @@
+# An (if) branch can contain a label directly, without an enclosing (do).
+var "count" 0
+if true { label "direct-label" }
+set "count" { count + 1 }
+if count == 2 { exit 0 count }
+goto direct-label
