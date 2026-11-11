@@ -10,13 +10,19 @@ set -o errexit || exit; set -o errtrace; set -o nounset; set -o pipefail
 
 shopt -s nullglob
 
-SOURCE_FILES=(
+SOURCES=(
   src/*.c
   lispico/src/*.c
   confetti/confetti.c
   generated/confetti_unidata.c
   "${MAIN_SOURCE_FILE}"
 )
+SOURCE_FILES=()
+for source in "${SOURCES[@]}"; do
+  if [[ ${source##*/} != parse.c ]]; then
+    SOURCE_FILES+=("$source")
+  fi
+done
 
 # The variables substitution is intentionally preserving arguments splitting.
 # shellcheck disable=SC2206
