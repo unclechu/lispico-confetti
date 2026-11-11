@@ -21,6 +21,9 @@ cd -- "$SCRIPT_DIR/../.." # Switch to project root
 
 : "${LISPICO_EXECUTABLE:=./lispico-confetti}"
 
+LISPICO_EXECUTABLE_NAME=${LISPICO_EXECUTABLE##*/}
+LISPICO_EXECUTABLE_DIR=$(dirname -- "$LISPICO_EXECUTABLE")
+
 # Guard dependencies
 if [[ ! -x "$LISPICO_EXECUTABLE" ]]; then
   >&2 printf "“%s” is not an executable (did you run “./build.sh” first?)\n" "$LISPICO_EXECUTABLE"
@@ -53,6 +56,13 @@ else
   # E_SECONDARY_COLOR=$'\033[1m'
   E_FAIL_COLOR=$'\033[1;37;41m'
   # E_PASS_COLOR=$'\033[32m'
+fi
+
+if [[ $LISPICO_EXECUTABLE_NAME != lispico-confetti ]]; then
+  >&2 printf \
+    "%sWARNING!%s Lispico executable name is not “lispico-confetti” but “%s” (shebang test will fail!)\n" \
+    "$E_FAIL_COLOR" "$E_RESET_COLOR" \
+    "${E_FAIL_COLOR}${LISPICO_EXECUTABLE_NAME}${E_RESET_COLOR}"
 fi
 
 only_missing=false
@@ -113,7 +123,13 @@ handle-example() {
       "$O_SECONDARY_COLOR" "$O_RESET_COLOR" \
       "$O_SECONDARY_COLOR" "$source" "$O_RESET_COLOR"
 
-    "$LISPICO_EXECUTABLE" "$source" >"$expectation_out" 2>"$expectation_err" || exit_code=$?
+    if [[ ${source##*/} == shebang.confetti ]]; then
+      PATH="$LISPICO_EXECUTABLE_DIR:$PATH" \
+        "$source" >"$expectation_out" 2>"$expectation_err" || exit_code=$?
+    else
+      "$LISPICO_EXECUTABLE" -ps "$source" >"$expectation_out" 2>"$expectation_err" || exit_code=$?
+    fi
+
     printf '%d\n' "$exit_code" >"$expectation_ec"
 
     printf \

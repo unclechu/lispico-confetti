@@ -115,7 +115,8 @@ run_test() {
       || actual_exit_code=$?
   else
     timeout -- "$TIMEOUT" \
-      "$LISPICO_EXECUTABLE" "$SOURCE" >"$TMP_DIR/stdout" 2>"$TMP_DIR/stderr" || actual_exit_code=$?
+      "$LISPICO_EXECUTABLE" -ps "$SOURCE" >"$TMP_DIR/stdout" 2>"$TMP_DIR/stderr" \
+      || actual_exit_code=$?
   fi
 
   if (( actual_exit_code != expected_exit_code )); then

@@ -60,6 +60,15 @@ To use locally initialized submodules instead of the pins:
 nix-build -A lispico-confetti --arg useLocalSubmodules true
 ```
 
+## Command-line interface
+
+Lispico Confetti has the same command-line interface as original Lispico.
+See for details: https://github.com/unclechu/lispico#command-line-interface
+
+```sh
+lispico-confetti --help
+```
+
 ## Translation rules
 
 Confetti supplies the complete structural AST. Lispico Confetti interprets
