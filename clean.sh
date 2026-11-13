@@ -6,4 +6,4 @@ cd -- "$SCRIPT_DIR" # Switch to project root
 
 shopt -s nullglob
 set -o xtrace
-rm -vf -- lispico-confetti
+rm -vf -- lispico-confetti lispico-confetti-*-tests
