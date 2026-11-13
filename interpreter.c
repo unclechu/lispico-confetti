@@ -309,6 +309,7 @@ int main(int argc, char **argv) {
             source_length,
             location,
             cli.source_context_before,
+            "confetti",
             source_highlight,
             source_highlight_sh
           );
