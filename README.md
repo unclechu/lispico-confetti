@@ -69,6 +69,31 @@ See for details: https://github.com/unclechu/lispico#command-line-interface
 lispico-confetti --help
 ```
 
+### Evaluation failure locations
+
+Lispico Confetti populates Lispico’s optional expression source-map table
+with offsets into the original Confetti source. Source mapping is enabled by
+default. Evaluation errors report the source line and byte column, followed
+by the failing line, up to three preceding lines, and an upward arrow.
+
+```sh
+lispico-confetti --source-highlight=none program.confetti
+lispico-confetti --source-context-before=5 program.confetti
+lispico-confetti --no-source-map program.confetti
+```
+
+`--no-source-map` skips source-location storage and prints the expression index
+instead. The `--source-highlight` modes `bat`, `none`, and `sh`, their CLI and
+environment settings, and the custom shell renderer behave like Lispico’s
+corresponding options. `bat` is attempted by default and silently falls back
+to the plain renderer when unavailable. The `sh` mode receives the original
+Confetti source on stdin and the `LISPICO_SOURCE_CONTEXT_*` environment
+variables, and controls the whole excerpt.
+
+The existing example runners explicitly select `--source-highlight=none` to
+keep expected stderr deterministic, including when `bat` is installed. The
+expected-error fixtures themselves are not changed by this update.
+
 ## Translation rules
 
 Confetti supplies the complete structural AST. Lispico Confetti interprets

@@ -1,1 +1,4 @@
-[FAIL] Evaluation failed: (assert) message must be a string
+[FAIL] Evaluation failed: Line 2 Column 1: (assert) message must be a string
+1 | # Adjacent directives are a single expression only for operator continuations.
+2 | assert {id {gc} println "unexpected"}
+  | ↑

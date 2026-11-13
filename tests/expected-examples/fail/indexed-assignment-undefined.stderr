@@ -1,1 +1,3 @@
-[FAIL] Evaluation failed: (arr-set) array “foo” is not defined
+[FAIL] Evaluation failed: Line 1 Column 1: (arr-set) array “foo” is not defined
+1 | foo[0] = 1
+  | ↑

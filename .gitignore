@@ -5,6 +5,7 @@ result-*
 # GCC build artifacts
 *.o
 lispico-confetti
+lispico-confetti-*-tests
 
 # Archives
 *.zip

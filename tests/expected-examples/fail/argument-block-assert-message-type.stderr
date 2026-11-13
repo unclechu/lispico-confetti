@@ -1,1 +1,5 @@
-[FAIL] Evaluation failed: (assert) message must be a string
+[FAIL] Evaluation failed: Line 3 Column 1: (assert) message must be a string
+1 | # Block arguments after the condition are passed separately to `assert`.
+2 | # The optional message argument must be a string.
+3 | assert {id 1; id 2}
+  | ↑

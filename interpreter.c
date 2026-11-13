@@ -1,3 +1,4 @@
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,6 +15,7 @@
 #include "lispico/src/symbol-error.h"
 #include "lispico/src/symbol-print.h"
 #include "lispico/src/parse-cli-args.h"
+#include "lispico/src/source-highlight.h"
 #include "src/confetti-translate.h"
 
 #define DEFAULT_EXECUTABLE_NAME "lispico-confetti"
@@ -121,8 +123,38 @@ int main(int argc, char **argv) {
       return 1;
   }
 
+  // CLI settings override the environment. Without source mapping, the
+  // highlighter configuration has no effect and need not be resolved.
+  SourceHighlightMode source_highlight = SOURCE_HIGHLIGHT_NONE;
+  const char *source_highlight_sh = NULL;
+  if (cli.with_source_map) {
+    const char *mode = cli.source_highlight;
+    if (mode == NULL) mode = getenv("LISPICO_SOURCE_HIGHLIGHT");
+    if (mode == NULL || mode[0] == '\0') mode = "bat";
+
+    if (!parse_source_highlight_mode(mode, &source_highlight)) {
+      fprintf(stderr, "[FAIL] Invalid source highlighter mode “%s”\n", mode);
+      clean_cli_args(&cli);
+      return 1;
+    }
+
+    source_highlight_sh = cli.source_highlight_sh;
+    if (source_highlight_sh == NULL)
+      source_highlight_sh = getenv("LISPICO_SOURCE_HIGHLIGHT_SH");
+
+    if (
+      source_highlight == SOURCE_HIGHLIGHT_SH &&
+      (source_highlight_sh == NULL || source_highlight_sh[0] == '\0')
+    ) {
+      fprintf(stderr, "[FAIL] Source highlighter sh mode requires a shell command\n");
+      clean_cli_args(&cli);
+      return 1;
+    }
+  }
+
   // Match Lispico's host-owned, fixed-capacity interpreter storage.
   static Expression expressions[EXPR_CAPACITY] = {0};
+  static ExpressionSourceLocation expression_source_locations[EXPR_CAPACITY] = {0};
   static ExpressionAllocation expression_allocations[EXPR_ALLOCATION_CAPACITY] = {0};
   static Symbol symbols[SYMBOL_CAPACITY] = {0};
   static EvalRuntimeAllocation runtime_allocations[EVAL_RUNTIME_ALLOCATION_CAPACITY] = {0};
@@ -131,12 +163,21 @@ int main(int argc, char **argv) {
   InterpreterStorage storage = {
     .expressions = expressions,
     .expression_capacity = EXPR_CAPACITY,
+
+    .expression_source_locations =
+      cli.with_source_map ? expression_source_locations : NULL,
+    .expression_source_location_capacity =
+      cli.with_source_map ? EXPR_CAPACITY : 0,
+
     .expression_allocations = expression_allocations,
     .expression_allocation_capacity = EXPR_ALLOCATION_CAPACITY,
+
     .symbols = symbols,
     .symbol_capacity = SYMBOL_CAPACITY,
+
     .runtime_allocations = runtime_allocations,
     .runtime_allocation_capacity = EVAL_RUNTIME_ALLOCATION_CAPACITY,
+
     .deferred_expression_indices = deferred_expressions,
     .deferred_expression_capacity = EVAL_DEFER_CAPACITY,
   };
@@ -144,6 +185,7 @@ int main(int argc, char **argv) {
   Interpreter interpreter = {0};
   if (!configure_interpreter_storage(&interpreter, &storage)) {
     fprintf(stderr, "[FAIL] Unable to configure interpreter storage\n");
+    clean_cli_args(&cli);
     return 1;
   }
 
@@ -250,7 +292,37 @@ int main(int argc, char **argv) {
       }
 
     case EVAL_FAIL:
-      fprintf(stderr, "[FAIL] Evaluation failed: %s\n", outcome.as.fail_msg);
+      if (outcome.failure_expression_index != EXPR_NONE) {
+        const ExpressionSourceLocation *location =
+          get_expression_source_location(&interpreter, outcome.failure_expression_index);
+        if (location != NULL) {
+          fprintf(
+            stderr,
+            "[FAIL] Evaluation failed: Line %" PRIu32 " Column %" PRIu32 ": %s\n",
+            location->line,
+            location->column,
+            outcome.as.fail_msg
+          );
+          print_source_highlight(
+            stderr,
+            source,
+            source_length,
+            location,
+            cli.source_context_before,
+            source_highlight,
+            source_highlight_sh
+          );
+        } else {
+          fprintf(
+            stderr,
+            "[FAIL] Evaluation failed: Expression Index %" PRIu32 ": %s\n",
+            outcome.failure_expression_index,
+            outcome.as.fail_msg
+          );
+        }
+      } else {
+        fprintf(stderr, "[FAIL] Evaluation failed: %s\n", outcome.as.fail_msg);
+      }
       exit_code = 1;
       goto done;
 

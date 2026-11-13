@@ -6,7 +6,6 @@
 # shellcheck disable=SC1111
 # Do not assume environment variables presence:
 # shellcheck enable=check-unassigned-uppercase
-#
 # Set directory to project root:
 # shellcheck source-path=SCRIPTDIR/..
 
@@ -35,27 +34,7 @@ fi
 >/dev/null type rm
 >/dev/null type awk
 
-# Terminal colors
-# Disable stdout terminal coloring for redirects
-if [[ ! -t 1 && ${FORCE_COLOR:-0} != 1 && ${GITHUB_ACTIONS:-} != true ]]; then
-  O_RESET_COLOR=
-  O_SECONDARY_COLOR=
-  O_FAIL_COLOR=
-  O_PASS_COLOR=
-else
-  O_RESET_COLOR=$'\033[0m'
-  O_SECONDARY_COLOR=$'\033[1m'
-  O_FAIL_COLOR=$'\033[1;37;41m'
-  O_PASS_COLOR=$'\033[32m'
-fi
-# Disable stderr terminal coloring for redirects
-if [[ ! -t 2 && ${FORCE_COLOR:-0} != 1 && ${GITHUB_ACTIONS:-} != true ]]; then
-  E_RESET_COLOR=
-  E_FAIL_COLOR=
-else
-  E_RESET_COLOR=$'\033[0m'
-  E_FAIL_COLOR=$'\033[1;37;41m'
-fi
+source tests/dev-scripts/colors.sh
 
 if [[ $LISPICO_EXECUTABLE_NAME != lispico-confetti ]]; then
   >&2 printf \
@@ -64,11 +43,8 @@ if [[ $LISPICO_EXECUTABLE_NAME != lispico-confetti ]]; then
     "${E_FAIL_COLOR}${LISPICO_EXECUTABLE_NAME}${E_RESET_COLOR}"
 fi
 
-cleanup() {
-  rm -fv -- "$TMP_FILE"
-}
-
 TMP_FILE="$(mktemp)"
+cleanup() { rm -fv -- "$TMP_FILE"; }
 trap cleanup EXIT
 
 TIMEOUT=30s
@@ -95,12 +71,12 @@ measure-example() {
   local peak_ram=0
 
   if [[ ${NAME##*/} == shebang.confetti ]]; then
-    PATH="$LISPICO_EXECUTABLE_DIR:$PATH" \
+    PATH="$LISPICO_EXECUTABLE_DIR:$PATH" LISPICO_SOURCE_HIGHLIGHT=none \
       /usr/bin/env time -q -f '%e %M' -o "$TMP_FILE" timeout -- "$TIMEOUT" \
       "$SOURCE" &>/dev/null || exit_code=$?
   else
     /usr/bin/env time -q -f '%e %M' -o "$TMP_FILE" timeout -- "$TIMEOUT" \
-      "$LISPICO_EXECUTABLE" -ps "$SOURCE" &>/dev/null || exit_code=$?
+      "$LISPICO_EXECUTABLE" --source-highlight=none -ps "$SOURCE" &>/dev/null || exit_code=$?
   fi
 
   read -r elapsed peak_ram < "$TMP_FILE"

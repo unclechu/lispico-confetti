@@ -1,1 +1,3 @@
-[FAIL] Evaluation failed: (var) expects exactly 2 arguments, got instead: 1
+[FAIL] Evaluation failed: Line 1 Column 1: (var) expects exactly 2 arguments, got instead: 1
+1 | var "value" {} # Zero arguments from the block: `var` has no initializer
+  | ↑

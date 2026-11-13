@@ -25,6 +25,9 @@ jobs:
         env:
           LISPICO_EXECUTABLE: ./result/bin/lispico-confetti
 
+      - name: Run C tests
+        run: nix-shell --run './tests/run-c.sh'
+
       - name: Measure time and memory usage for all examples
         run: nix-shell --run './tests/measure-examples.sh'
         env:

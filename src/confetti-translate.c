@@ -12,11 +12,61 @@ typedef struct {
   const char *source;
   size_t source_length;
   char (*error)[ERR_MSG_SIZE];
+
+  // Cache the last source position while assigning optional source locations.
+  size_t location_scan_offset;
+  uint32_t location_scan_line;
+  uint32_t location_scan_column;
 } ConfettiTranslator;
+
+// Confetti’s argument lexeme offsets refer to the original source buffer.
+// Advance through that buffer only when a source-map table was supplied.
+static void record_source_location(
+  ConfettiTranslator *translator,
+  uint32_t index,
+  size_t byte_offset
+) {
+  ExpressionSourceLocation *locations =
+    translator->interpreter->storage.expression_source_locations;
+
+  if (locations == NULL || byte_offset >= translator->source_length) return;
+
+  if (byte_offset < translator->location_scan_offset) {
+    translator->location_scan_offset = 0;
+    translator->location_scan_line = 1;
+    translator->location_scan_column = 1;
+  }
+
+  while (translator->location_scan_offset < byte_offset) {
+    char c = translator->source[translator->location_scan_offset];
+    if (c == '\n') {
+      ++translator->location_scan_line;
+      translator->location_scan_column = 1;
+    } else {
+      ++translator->location_scan_column;
+    }
+    ++translator->location_scan_offset;
+  }
+
+  locations[index] = (ExpressionSourceLocation) {
+    .byte_offset = (uint32_t)byte_offset,
+    .line = translator->location_scan_line,
+    .column = translator->location_scan_column,
+  };
+}
+
+static size_t argument_offset(const conf_argument *argument) {
+  return argument != NULL ? argument->lexeme_offset : 0;
+}
+
+static size_t directive_offset(const conf_directive *directive) {
+  return argument_offset(conf_get_argument(directive, 0));
+}
 
 static bool new_expression(
   ConfettiTranslator *translator,
   ExpressionKind kind,
+  size_t byte_offset,
   uint32_t *index
 ) {
   Interpreter *interpreter = translator->interpreter;
@@ -32,6 +82,7 @@ static bool new_expression(
     .next = EXPR_NONE,
   };
   interpreter->expression_count++;
+  record_source_location(translator, *index, byte_offset);
   return true;
 }
 
@@ -83,8 +134,13 @@ static bool store_text(
 }
 
 // Allocate new EXPR_NAME expression entry.
-static bool new_name(ConfettiTranslator *translator, const char *name, uint32_t *index) {
-  if (!new_expression(translator, EXPR_NAME, index)) return false;
+static bool new_name(
+  ConfettiTranslator *translator,
+  const char *name,
+  size_t byte_offset,
+  uint32_t *index
+) {
+  if (!new_expression(translator, EXPR_NAME, byte_offset, index)) return false;
   return store_text(
     translator,
     name,
@@ -149,7 +205,7 @@ static bool translate_string_value(
   }
   text[length] = '\0';
 
-  if (!new_expression(translator, EXPR_STRING, index)) return false;
+  if (!new_expression(translator, EXPR_STRING, byte_offset, index)) return false;
   return store_text(
     translator,
     text,
@@ -202,7 +258,7 @@ static bool translate_bare_atom(
         return false;
     }
 
-    if (!new_expression(translator, kind, index)) return false;
+    if (!new_expression(translator, kind, byte_offset, index)) return false;
     translator->interpreter->storage.expressions[*index].data = data;
     return true;
   }
@@ -215,7 +271,7 @@ static bool translate_bare_atom(
 
   char name[SYMBOL_NAME_SIZE] = {'\0'};
   memcpy(name, text, length);
-  if (!new_expression(translator, EXPR_NAME, index)) return false;
+  if (!new_expression(translator, EXPR_NAME, byte_offset, index)) return false;
   return store_text(
     translator,
     name,
@@ -234,6 +290,8 @@ typedef struct {
   size_t index_length;
   bool is_string;
   bool block_index;
+  size_t byte_offset;
+  size_t index_byte_offset;
 } IndexedArgument;
 
 static bool parse_indexed_argument(
@@ -270,6 +328,8 @@ static bool parse_indexed_argument(
     .index_length = (size_t)(text + length - 1 - (opening + 1)),
     .is_string = is_string,
     .block_index = opening[1] == ']',
+    .byte_offset = argument->lexeme_offset,
+    .index_byte_offset = argument->lexeme_offset + (size_t)(opening + 1 - text),
   };
 
   return true;
@@ -386,24 +446,27 @@ typedef struct {
   uint32_t expression;
   uint32_t previous_child;
   size_t operands;
+  size_t source_offset;
 } InfixCall;
 
 static bool start_infix_call(
   InfixCall *call,
   ConfettiTranslator *translator,
-  const char *operator_name
+  const char *operator_name,
+  size_t byte_offset
 ) {
   call->translator = translator;
   call->operator_name = operator_name;
   call->previous_child = EXPR_NONE;
   call->operands = 0;
+  call->source_offset = byte_offset;
 
   // Allocate the call before its operands. Lispico starts evaluating at
   // expression index 0, so the first top-level expression must own that slot.
-  if (!new_expression(translator, EXPR_LIST, &call->expression)) return false;
+  if (!new_expression(translator, EXPR_LIST, byte_offset, &call->expression)) return false;
 
   uint32_t name = EXPR_NONE;
-  if (!new_name(translator, lispico_operator_name(operator_name), &name)) return false;
+  if (!new_name(translator, lispico_operator_name(operator_name), byte_offset, &name)) return false;
   append_child(translator->interpreter, call->expression, &call->previous_child, name);
   return true;
 }
@@ -426,7 +489,7 @@ static bool append_infix_operand(InfixCall *call, uint32_t operand) {
   // expression: the evaluator always starts with expression index 0.
   if (call->operands == EVAL_ARG_CAPACITY) {
     uint32_t inner_index = EXPR_NONE;
-    if (!new_expression(translator, EXPR_LIST, &inner_index)) return false;
+    if (!new_expression(translator, EXPR_LIST, call->source_offset, &inner_index)) return false;
 
     Interpreter *interpreter = translator->interpreter;
     Expression *expressions = interpreter->storage.expressions;
@@ -441,7 +504,12 @@ static bool append_infix_operand(InfixCall *call, uint32_t operand) {
     call->previous_child = EXPR_NONE;
     uint32_t operator_index = EXPR_NONE;
     if (
-      !new_name(translator, lispico_operator_name(call->operator_name), &operator_index)
+      !new_name(
+        translator,
+        lispico_operator_name(call->operator_name),
+        call->source_offset,
+        &operator_index
+      )
     ) return false;
     append_child(interpreter, call->expression, &call->previous_child, operator_index);
     append_child(interpreter, call->expression, &call->previous_child, inner_index);
@@ -561,7 +629,14 @@ static bool translate_infix_argument_span(
   if (end - first == 1 && !include_block)
     return translate_argument(translator, conf_get_argument(directive, first), index);
 
-  if (!new_expression(translator, EXPR_LIST, index)) return false;
+  if (
+    !new_expression(
+      translator,
+      EXPR_LIST,
+      argument_offset(conf_get_argument(directive, first)),
+      index
+    )
+  ) return false;
   uint32_t previous_child = EXPR_NONE;
   for (long i = first; i < end; ++i) {
     uint32_t argument = EXPR_NONE;
@@ -594,13 +669,14 @@ static bool new_symbol_string(
   ConfettiTranslator *translator,
   const char *name,
   size_t length,
+  size_t byte_offset,
   uint32_t *index
 ) {
   if (length == 0 || length >= SYMBOL_NAME_SIZE) {
     snprintf(*translator->error, ERR_MSG_SIZE, "Invalid indexed or assignment symbol name");
     return false;
   }
-  if (!new_expression(translator, EXPR_STRING, index)) return false;
+  if (!new_expression(translator, EXPR_STRING, byte_offset, index)) return false;
   return store_text(
     translator,
     name,
@@ -650,24 +726,41 @@ static bool translate_indexed_operation(
     return false;
   }
 
-  if (!new_expression(translator, EXPR_LIST, index)) return false;
+  if (!new_expression(translator, EXPR_LIST, target->byte_offset, index)) return false;
   uint32_t previous = EXPR_NONE;
   uint32_t child = EXPR_NONE;
   const char *fn_name =
     assignment != NULL
     ? (target->is_string ? "str-set" : "arr-set")
     : (target->is_string ? "str-get" : "arr-get");
-  if (!new_name(translator, fn_name, &child)) return false;
+  if (!new_name(translator, fn_name, target->byte_offset, &child)) return false;
   append_child(translator->interpreter, *index, &previous, child);
 
-  if (!new_symbol_string(translator, target->name, target->name_length, &child)) return false;
+  if (
+    !new_symbol_string(
+      translator,
+      target->name,
+      target->name_length,
+      target->byte_offset,
+      &child
+    )
+  ) return false;
   append_child(translator->interpreter, *index, &previous, child);
 
   if (index_block != NULL) {
     if (!translate_single_block(translator, index_block, &child)) return false;
-  } else if (
-    !translate_bare_atom(translator, target->index_text, target->index_length, 0, &child)
-  ) return false;
+  } else {
+    // The index is inside the same unquoted Confetti argument as its name.
+    if (
+      !translate_bare_atom(
+        translator,
+        target->index_text,
+        target->index_length,
+        target->index_byte_offset,
+        &child
+      )
+    ) return false;
+  }
   append_child(translator->interpreter, *index, &previous, child);
 
   if (assignment != NULL) {
@@ -696,13 +789,21 @@ static bool translate_scalar_assignment(
     return false;
   }
 
-  if (!new_expression(translator, EXPR_LIST, index)) return false;
+  if (!new_expression(translator, EXPR_LIST, name->lexeme_offset, index)) return false;
   uint32_t previous = EXPR_NONE;
   uint32_t child = EXPR_NONE;
-  if (!new_name(translator, "set", &child)) return false;
+  if (!new_name(translator, "set", name->lexeme_offset, &child)) return false;
   append_child(translator->interpreter, *index, &previous, child);
 
-  if (!new_symbol_string(translator, name->value, strlen(name->value), &child)) return false;
+  if (
+    !new_symbol_string(
+      translator,
+      name->value,
+      strlen(name->value),
+      name->lexeme_offset,
+      &child
+    )
+  ) return false;
   append_child(translator->interpreter, *index, &previous, child);
 
   if (!translate_assignment_rhs(translator, directive, 2, &child)) return false;
@@ -878,10 +979,11 @@ static bool translate_sequence_block(
   const conf_directive *directive,
   uint32_t *index
 ) {
-  if (!new_expression(translator, EXPR_LIST, index)) return false;
+  size_t byte_offset = directive_offset(directive);
+  if (!new_expression(translator, EXPR_LIST, byte_offset, index)) return false;
   uint32_t previous = EXPR_NONE;
   uint32_t name = EXPR_NONE;
-  if (!new_name(translator, "do", &name)) return false;
+  if (!new_name(translator, "do", byte_offset, &name)) return false;
   append_child(translator->interpreter, *index, &previous, name);
 
   long count = conf_get_directive_count(directive);
@@ -932,7 +1034,14 @@ static bool translate_infix_directive(
   }
 
   InfixCall call;
-  if (!start_infix_call(&call, translator, operator_name)) return false;
+  if (
+    !start_infix_call(
+      &call,
+      translator,
+      operator_name,
+      argument_offset(conf_get_argument(directive, 1))
+    )
+  ) return false;
 
   uint32_t first = EXPR_NONE;
   if (!translate_argument(translator, conf_get_argument(directive, 0), &first)) return false;
@@ -956,10 +1065,17 @@ static bool translate_call_with_operator_suffix(
   uint32_t *index
 ) {
   InfixCall call;
-  if (!start_infix_call(&call, translator, operator_name)) return false;
+  if (
+    !start_infix_call(
+      &call,
+      translator,
+      operator_name,
+      argument_offset(conf_get_argument(directive, operator_position))
+    )
+  ) return false;
 
   uint32_t function = EXPR_NONE;
-  if (!new_expression(translator, EXPR_LIST, &function)) return false;
+  if (!new_expression(translator, EXPR_LIST, directive_offset(directive), &function)) return false;
   uint32_t previous = EXPR_NONE;
   for (long i = 0; i < operator_position; ++i) {
     uint32_t argument = EXPR_NONE;
@@ -1017,7 +1133,14 @@ static bool translate_condition_arguments(
   }
 
   InfixCall call;
-  if (!start_infix_call(&call, translator, operator_arg->value)) return false;
+  if (
+    !start_infix_call(
+      &call,
+      translator,
+      operator_arg->value,
+      operator_arg->lexeme_offset
+    )
+  ) return false;
 
   for (long i = first; i < end; i += 2) {
     if (
@@ -1041,13 +1164,14 @@ typedef struct {
 
 static bool start_conditional_call(
   ConfettiTranslator *translator,
-  ConditionalCall *call
+  ConditionalCall *call,
+  size_t byte_offset
 ) {
   call->previous_child = EXPR_NONE;
-  if (!new_expression(translator, EXPR_LIST, &call->expression)) return false;
+  if (!new_expression(translator, EXPR_LIST, byte_offset, &call->expression)) return false;
 
   uint32_t name = EXPR_NONE;
-  if (!new_name(translator, "if", &name)) return false;
+  if (!new_name(translator, "if", byte_offset, &name)) return false;
   append_child(translator->interpreter, call->expression, &call->previous_child, name);
   return true;
 }
@@ -1161,7 +1285,13 @@ static bool translate_if_chain(
   ConditionalCall current;
   // Reserve the outermost expression before its children so root index 0
   // always points at the complete conditional call.
-  if (!start_conditional_call(translator, &current)) return false;
+  if (
+    !start_conditional_call(
+      translator,
+      &current,
+      directive_offset(conf_get_directive(container, *position))
+    )
+  ) return false;
   *index = current.expression;
 
   uint32_t condition = EXPR_NONE;
@@ -1178,7 +1308,13 @@ static bool translate_if_chain(
     long argc = conf_get_argument_count(next);
     if (argc > 1 && is_bare_argument(translator, conf_get_argument(next, 1), "if")) {
       ConditionalCall nested;
-      if (!start_conditional_call(translator, &nested)) return false;
+      if (
+        !start_conditional_call(
+          translator,
+          &nested,
+          argument_offset(conf_get_argument(next, 1))
+        )
+      ) return false;
       append_child(
         translator->interpreter,
         current.expression,
@@ -1266,7 +1402,14 @@ static bool translate_sequence_item(
     const char *operator_name = conf_get_argument(next, 0)->value;
     InfixCall call;
     // Allocate the outer expression first to preserve Lispico’s entry index.
-    if (!start_infix_call(&call, translator, operator_name)) return false;
+    if (
+      !start_infix_call(
+        &call,
+        translator,
+        operator_name,
+        argument_offset(next_operator)
+      )
+    ) return false;
     uint32_t first_operand = EXPR_NONE;
     if (!translate_directive(translator, directive, &first_operand)) return false;
     if (!append_infix_operand(&call, first_operand)) return false;
@@ -1378,7 +1521,7 @@ static bool translate_directive(
   // Ordinary Confetti directives call the named Lispico function. Prefix
   // operators remain ordinary calls; logical `&&` and `||` use their Lispico
   // special-form names `and` and `or`.
-  if (!new_expression(translator, EXPR_LIST, index)) return false;
+  if (!new_expression(translator, EXPR_LIST, directive_offset(directive), index)) return false;
   uint32_t previous = EXPR_NONE;
   long argument_count = count;
   bool explicit_do = false;
@@ -1396,7 +1539,14 @@ static bool translate_directive(
       item->value != NULL &&
       (is_bare_argument(translator, item, "&&") || is_bare_argument(translator, item, "||"))
     ) {
-      if (!new_name(translator, lispico_operator_name(item->value), &argument)) return false;
+      if (
+        !new_name(
+          translator,
+          lispico_operator_name(item->value),
+          item->lexeme_offset,
+          &argument
+        )
+      ) return false;
     } else if (!translate_argument(translator, item, &argument)) {
       return false;
     }
@@ -1468,6 +1618,9 @@ bool parse_confetti_source(
     .source = source,
     .source_length = length,
     .error = error,
+    .location_scan_offset = 0,
+    .location_scan_line = 1,
+    .location_scan_column = 1,
   };
 
   const conf_directive *root = conf_get_root(unit);
