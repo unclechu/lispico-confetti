@@ -1,6 +1,16 @@
 { pkgs ? import <nixpkgs> {}
 , lib ? pkgs.lib
 , stdenv ? pkgs.stdenv
+, callPackage ? pkgs.callPackage
+, runCommand ? pkgs.runCommand
+, nix-gitignore ? pkgs.nix-gitignore
+, makeBinaryWrapper ? pkgs.makeBinaryWrapper
+, mkShell ? pkgs.mkShell
+
+, gcc ? pkgs.gcc
+, shellcheck ? pkgs.shellcheck
+, time ? pkgs.time
+, gawk ? pkgs.gawk
 
 , inNixShell ? false
 
@@ -10,22 +20,31 @@
 
 , lispicoSrc ? import nix/lispico-pin.nix
 , confettiSrc ? import nix/confetti-pin.nix
+, sublimeTextConfettiSrc ? import nix/sublime-text-confetti.nix
+
+, sublime-text-confetti ? callPackage sublimeTextConfettiSrc {}
+, bat-with-confetti ? sublime-text-confetti.bat-with-confetti
+
+, useBundledBat ? true
 }:
 
 let
   projectName = "lispico-confetti";
 
-  shell = pkgs.mkShell {
+  shell = mkShell {
     pname = "${projectName}-shell";
 
-    packages = [
-      pkgs.gcc
-      pkgs.shellcheck
+    packages =
+      [
+        gcc
+        shellcheck
 
-      # For testing scripts
-      pkgs.time # For memory footprint measurements and evaluation time
-      pkgs.gawk
-    ];
+        # For testing scripts
+        time # For memory footprint measurements and evaluation time
+        gawk
+      ]
+      # Fox syntax highlighting in source location excerpts
+      ++ lib.optional useBundledBat bat-with-confetti;
   };
 
   lispico-confetti = stdenv.mkDerivation (lib.fix (self: {
@@ -44,7 +63,7 @@ let
     # when `useLocalSubmodules` is `true`!
     # Run first:
     #   git submodule update --init --recursive
-    src = pkgs.nix-gitignore.gitignoreFilterRecursiveSource (path: type:
+    src = nix-gitignore.gitignoreFilterRecursiveSource (path: type:
       (type == "directory" && builtins.baseNameOf path == "src") ||
       (useLocalSubmodules && type == "directory" && builtins.baseNameOf path == "lispico") ||
       (useLocalSubmodules && type == "directory" && builtins.baseNameOf path == "confetti") ||
@@ -62,9 +81,7 @@ let
 
     dontConfigure = true;
 
-    nativeBuildInputs = [
-      # No extra dependencies needed
-    ];
+    nativeBuildInputs = lib.optional useBundledBat makeBinaryWrapper;
 
     buildInputs = [
       # No extra dependencies needed
@@ -88,16 +105,23 @@ let
         "$out/bin/"${lib.escapeShellArg self.pname}
       runHook postInstall
     '';
+
+    postFixup = lib.optionalString useBundledBat ''
+      wrapProgram "$out/bin/"${lib.escapeShellArg self.pname} \
+        --prefix PATH : ${lib.escapeShellArg (lib.makeBinPath [
+          bat-with-confetti
+        ])}
+    '';
   }));
 
   lispico-src =
-    pkgs.runCommand "${projectName}-lispico-src" {} ''
+    runCommand "${projectName}-lispico-src" {} ''
       mkdir -- "$out"
       cp -R -- ${lib.escapeShellArg "${lispicoSrc}"}/src/ "$out"/
     '';
 
   confetti-src =
-    pkgs.runCommand "${projectName}-confetti-src" {} ''
+    runCommand "${projectName}-confetti-src" {} ''
       mkdir -- "$out"
       cp -R -- ${lib.escapeShellArg "${confettiSrc}"}/confetti.{h,c} "$out"/
     '';
