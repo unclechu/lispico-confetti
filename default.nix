@@ -82,8 +82,25 @@ let
       runHook postInstall
     '';
   }));
+
+  lispico-src =
+    pkgs.runCommand "${projectName}-lispico-src" {} ''
+      mkdir -- "$out"
+      cp -R -- ${lib.escapeShellArg "${lispicoSrc}"}/src/ "$out"/
+    '';
+
+  confetti-src =
+    pkgs.runCommand "${projectName}-confetti-src" {} ''
+      mkdir -- "$out"
+      cp -R -- ${lib.escapeShellArg "${confettiSrc}"}/confetti.{h,c} "$out"/
+    '';
 in
 
 (if inNixShell then shell else {}) // {
-  inherit shell lispico-confetti;
+  inherit
+    shell
+    lispico-confetti
+    lispico-src
+    confetti-src
+    ;
 }

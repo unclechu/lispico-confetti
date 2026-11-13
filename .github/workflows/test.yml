@@ -26,7 +26,11 @@ jobs:
           LISPICO_EXECUTABLE: ./result/bin/lispico-confetti
 
       - name: Run C tests
-        run: nix-shell --run './tests/run-c.sh'
+        run: |
+          rmdir lispico confetti
+          nix-build -A lispico-src -o lispico
+          nix-build -A confetti-src -o confetti
+          nix-shell --run './tests/run-c.sh'
 
       - name: Measure time and memory usage for all examples
         run: nix-shell --run './tests/measure-examples.sh'
