@@ -30,8 +30,15 @@ let
 
   lispico-confetti = stdenv.mkDerivation (lib.fix (self: {
     pname = projectName;
-    meta.mainProgram = self.pname;
     version = "0.0.0";
+
+    meta = {
+      description = "An alternative frontend for Lispico using the Confetti syntax and parser";
+      homepage = "https://github.com/unclechu/lispico-confetti";
+      license = lib.licenses.mit;
+      mainProgram = self.pname;
+      platforms = lib.platforms.unix;
+    };
 
     # Note that `lispico` and `confetti` Git submodules must be initialized
     # when `useLocalSubmodules` is `true`!
