@@ -27,10 +27,12 @@ jobs:
 
       - name: Run C tests
         run: |
-          rmdir lispico confetti
+          rmdir -v lispico confetti
           nix-build -A lispico-src -o lispico
           nix-build -A confetti-src -o confetti
           nix-shell --run './tests/run-c.sh'
+          rm -v lispico confetti
+          mkdir -v lispico confetti
 
       - name: Measure time and memory usage for all examples
         run: nix-shell --run './tests/measure-examples.sh'
