@@ -141,6 +141,67 @@ println "name"
 (println "name")
 ```
 
+### Function definitions (`fn`)
+
+`fn` has a declaration-specific translation rule. The first argument is the
+function name (a string literal, variable, or evaluated expression), and the
+**last complete argument or expression is the function body**. If there are
+arguments between them, their first name becomes a Lispico declaration call;
+its remaining arguments become string literals. The translator does not
+special-case `args` or `var-args` as declaration names: Lispico validates the
+resulting declaration.
+
+```confetti
+fn "identity" args x x
+fn "identity-block" args x {id x}
+fn "add" args "left" right {left + right}
+fn "all" var-args {id argc}
+fn "named-varargs" var-args first do {
+  id first
+}
+```
+
+```lisp
+(fn "identity" (args "x") x)
+(fn "identity-block" (args "x") x)
+(fn "add" (args "left" "right") (+ left right))
+(fn "all" (var-args) argc)
+(fn "named-varargs" (var-args "first") (do first))
+```
+
+A bare argument name such as `x` or `first` is converted to a string literal;
+a quoted name such as `"left"` stays a string literal. The body is translated
+normally. A final bare `x` is a variable reference, while `{id x}` makes that
+expression boundary explicit. `{left + right}` groups **one** body expression
+without creating an extra scope. Only `do { … }` introduces an explicit
+Lispico `(do)` scope; the translator does not add one automatically.
+
+A dynamic function name can also occupy the first native Confetti block.
+Confetti then represents the following declaration/body as a neighboring
+directive, which `fn` consumes as part of the definition:
+
+```confetti
+fn {str "dynamic" "-add"} args a b {a + b}
+fn {str "dynamic" "-answer"} do {
+  id 42
+}
+```
+
+These produce `(fn (str "dynamic" "-add") (args "a" "b") (+ a b))`
+and `(fn (str "dynamic" "-answer") (do 42))`, respectively.
+An arbitrary declaration name also works syntactically:
+`fn "example" custom a b {id a}` becomes
+`(fn "example" (custom "a" "b") a)`; Lispico decides whether `custom` is a
+valid declaration.
+
+The original ordinary argument-block syntax remains supported, including
+`fn "name" {args "x"; id x}` and
+`fn {str "dynamic" "-name"; args "x"; id x}`. These forms are useful
+when explicitly listing Lispico expressions instead of using the shorthand.
+A grouped prefix operator body, such as `{+ a b c d e}`, is unambiguous
+in the shorthand. For adjacent operator directives in the legacy braced
+form, `id { … }` still avoids the existing infix-continuation heuristic.
+
 ### Assignment and indexed access
 
 Assignment is translated into Lispico’s existing `(set)`, `(arr-set)`, or
@@ -392,13 +453,11 @@ args {foo}
 id {+ a b c d e}
 ```
 
-For example, a function with five named arguments can use the same pattern:
+For example, a function with five named arguments can use the same pattern
+with the concise `fn` declaration syntax:
 
 ```confetti
-fn "sum-five" {
-  args "a" "b" "c" "d" "e"
-  id {+ a b c d e}
-}
+fn "sum-five" args a b c d e {+ a b c d e}
 ```
 
 The `id` wrapper only makes the operator call unambiguous; it does not

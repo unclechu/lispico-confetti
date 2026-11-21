@@ -1,0 +1,47 @@
+# The final argument is the body, without an implicit (do) wrapper.
+fn "identity" args x x
+assert {identity 12 == 12}
+fn "identity-block" args x {id x}
+assert {identity-block 17 == 17}
+
+# Bare and quoted parameter names both become Lispico string literals.
+fn "add" args "left" right {left + right}
+assert {add 20 22 == 42}
+fn "sum-five" args a b c d e {+ a b c d e}
+assert {sum-five 1 2 3 4 5 == 15}
+
+# Variadic declarations, including a named leading argument.
+fn "count-all" var-args {id argc}
+assert {count-all 1 2 3 == 3}
+fn "first-argument" var-args first do {
+  assert {argc == 3}
+  id first
+}
+assert {first-argument 99 88 77 == 99}
+
+# Dynamic names can be followed by a declaration and one body expression.
+fn {str "dynamic" "-add"} args a b {a + b}
+assert {dynamic-add 11 31 == 42}
+fn {str "dynamic" "-answer"} do {
+  id 42
+}
+assert {id {dynamic-answer} == 42}
+fn {str "dynamic" "-literal"} 42
+assert {id {dynamic-literal} == 42}
+
+# A body may be a literal, a variable, or an explicitly grouped call.
+fn "literal" 42
+assert {id {literal} == 42}
+var "global-value" 123
+fn "read-global" global-value
+assert {id {read-global} == 123}
+fn "nested-call" args value {id {add value 1}}
+assert {nested-call 41 == 42}
+
+# Retain both existing function-definition forms.
+fn "legacy" {args "value"; id value}
+assert {legacy 7 == 7}
+fn {str "legacy" "-dynamic"; args "value"; id value}
+assert {legacy-dynamic 8 == 8}
+
+id 42

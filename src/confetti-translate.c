@@ -1392,6 +1392,129 @@ static bool translate_if_chain(
   return true;
 }
 
+// An `fn` declaration names its function first and supplies its body last.
+// Any intervening arguments form one declaration call: its first argument
+// is the call name, and the remaining names become string literals.
+// The name can also come from a preceding `fn { … }` directive.
+static bool translate_fn_definition(
+  ConfettiTranslator *translator,
+  const conf_directive *directive,
+  const conf_directive *tail,
+  uint32_t *index
+) {
+  size_t byte_offset = directive_offset(directive);
+  if (!new_expression(translator, EXPR_LIST, byte_offset, index)) return false;
+
+  uint32_t previous = EXPR_NONE;
+  uint32_t child = EXPR_NONE;
+  if (!new_name(translator, "fn", byte_offset, &child)) return false;
+  append_child(translator->interpreter, *index, &previous, child);
+
+  // A dynamic name occupies the entire first directive's single block.
+  if (tail != directive) {
+    if (!translate_single_block(translator, directive, &child)) return false;
+  } else {
+    if (!translate_argument(translator, conf_get_argument(directive, 1), &child))
+      return false;
+  }
+  append_child(translator->interpreter, *index, &previous, child);
+
+  long first = tail == directive ? 2 : 0;
+  long count = conf_get_argument_count(tail);
+  bool has_block = has_directive_block(translator, tail);
+  bool explicit_do =
+    has_block &&
+    count > first &&
+    is_bare_argument(translator, conf_get_argument(tail, count - 1), "do");
+  long declaration_end = has_block ? count - (explicit_do ? 1 : 0) : count - 1;
+
+  if (declaration_end < first) {
+    snprintf(*translator->error, ERR_MSG_SIZE, "`fn` requires a body expression");
+    return false;
+  }
+
+  if (declaration_end > first) {
+    const conf_argument *declaration = conf_get_argument(tail, first);
+    if (
+      declaration == NULL ||
+      declaration->value == NULL ||
+      !is_bare_argument(translator, declaration, declaration->value)
+    ) {
+      snprintf(*translator->error, ERR_MSG_SIZE, "`fn` expects a bare declaration name");
+      return false;
+    }
+
+    // Build `(args "a" "b")`, `(var-args "a")`, or any other declaration
+    // name verbatim. Lispico itself decides whether the declaration is valid.
+    uint32_t declaration_index = EXPR_NONE;
+    if (
+      !new_expression(
+        translator,
+        EXPR_LIST,
+        argument_offset(declaration),
+        &declaration_index
+      )
+    ) return false;
+    uint32_t declaration_previous = EXPR_NONE;
+    if (
+      !new_name(
+        translator,
+        declaration->value,
+        argument_offset(declaration),
+        &child
+      )
+    ) return false;
+    append_child(translator->interpreter, declaration_index, &declaration_previous, child);
+
+    for (long i = first + 1; i < declaration_end; ++i) {
+      const conf_argument *name = conf_get_argument(tail, i);
+      if (name == NULL || name->value == NULL || name->is_expression) {
+        snprintf(*translator->error, ERR_MSG_SIZE, "Invalid `fn` argument name");
+        return false;
+      }
+      if (
+        name->lexeme_offset < translator->source_length &&
+        translator->source[name->lexeme_offset] == '"'
+      ) {
+        if (!translate_argument(translator, name, &child)) return false;
+      } else {
+        // Unquoted parameter names are strings, never symbol references.
+        size_t length = strlen(name->value);
+        if (length == 0 || length >= SYMBOL_NAME_SIZE) {
+          snprintf(*translator->error, ERR_MSG_SIZE, "Invalid `fn` argument name");
+          return false;
+        }
+        if (
+          !new_symbol_string(
+            translator,
+            name->value,
+            length,
+            argument_offset(name),
+            &child
+          )
+        ) return false;
+      }
+      append_child(translator->interpreter, declaration_index, &declaration_previous, child);
+    }
+    append_child(translator->interpreter, *index, &previous, declaration_index);
+  }
+
+  // The body is one expression. A trailing `do { … }` is a normal Lispico
+  // `(do …)`, whereas `{ … }` is just grouping and introduces no scope.
+  if (has_block) {
+    if (explicit_do) {
+      if (!translate_sequence_block(translator, tail, &child)) return false;
+    } else {
+      if (!translate_single_block(translator, tail, &child)) return false;
+    }
+  } else {
+    if (!translate_argument(translator, conf_get_argument(tail, count - 1), &child))
+      return false;
+  }
+  append_child(translator->interpreter, *index, &previous, child);
+  return true;
+}
+
 static bool translate_sequence_item(
   ConfettiTranslator *translator,
   const conf_directive *container,
@@ -1406,6 +1529,35 @@ static bool translate_sequence_item(
   long count = conf_get_directive_count(container);
   const conf_directive *next =
     *position + 1 < count ? conf_get_directive(container, *position + 1) : NULL;
+
+  if (is_bare_argument(translator, first, "fn")) {
+    long argc = conf_get_argument_count(directive);
+    bool has_block = has_directive_block(translator, directive);
+
+    // `fn {name-expression} declaration ... body` is represented by two
+    // neighboring directives, unless the first block already contains the
+    // complete legacy `(fn NAME [DECLARATION] BODY)` argument sequence.
+    if (argc == 1 && has_block && conf_get_directive_count(directive) == 1) {
+      if (next == NULL) {
+        snprintf(*translator->error, ERR_MSG_SIZE, "`fn` requires a body expression");
+        return false;
+      }
+      if (!translate_fn_definition(translator, directive, next, index)) return false;
+      *position += 2;
+      return true;
+    }
+
+    // Retain the original braced function syntax, where a block supplies
+    // separate declaration and body expressions, without rewriting them.
+    if (argc >= 3) {
+      if (!translate_fn_definition(translator, directive, directive, index)) return false;
+      ++*position;
+      return true;
+    }
+    if (!translate_directive(translator, directive, index)) return false;
+    ++*position;
+    return true;
+  }
 
   // A computed-index assignment is two adjacent native Confetti directives:
   // `foo[] {i * 2} = 42` or `foo[] {i * 2} = {x + 1}`.
