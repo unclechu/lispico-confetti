@@ -901,6 +901,49 @@ static bool append_operator_continuation(
   return true;
 }
 
+// A continuation such as `+ str-size {id "Hello"}` has two native
+// arguments and a trailing block. The block belongs to the named right-hand
+// call, not to the operator itself. Do not mistake a numeric prefix argument
+// such as `+ 1 {id 2}` for a function name.
+static bool has_block_call_operand(
+  ConfettiTranslator *translator,
+  const conf_directive *directive
+) {
+  if (
+    directive == NULL ||
+    !has_directive_block(translator, directive) ||
+    conf_get_argument_count(directive) < 2
+  ) return false;
+
+  const conf_argument *argument = conf_get_argument(directive, 1);
+  if (
+    argument == NULL ||
+    argument->value == NULL ||
+    argument->is_expression ||
+    argument->lexeme_offset >= translator->source_length ||
+    translator->source[argument->lexeme_offset] == '"' ||
+    is_operator(argument->value)
+  ) return false;
+
+  String atom = { .data = argument->value, .length = strlen(argument->value) };
+  return !is_number_start(atom);
+}
+
+// `+ {str-size {id "Hello"}}` also continues a preceding block call when
+// the operator’s block contains exactly one native expression. Multiple
+// subdirectives retain the ordinary prefix-call meaning of `+ {id 1; id 2}`.
+static bool has_single_block_operand(
+  ConfettiTranslator *translator,
+  const conf_directive *directive
+) {
+  return (
+    directive != NULL &&
+    conf_get_argument_count(directive) == 1 &&
+    has_directive_block(translator, directive) &&
+    conf_get_directive_count(directive) == 1
+  );
+}
+
 // A directive beginning with an operator can continue a preceding expression
 // when it has operator/operand pairs. An operator without any operand is also
 // treated as an incomplete continuation for a useful error. A prefix call
@@ -918,11 +961,13 @@ static bool begins_operator_continuation(
   ) return false;
 
   long count = conf_get_argument_count(directive);
+  bool block_call_operand = has_block_call_operand(translator, directive);
   if (has_directive_block(translator, directive)) count++;
   return (
     count == 1 ||
     (count >= 2 && count % 2 == 0) ||
-    (count >= 3 && is_bare_argument(translator, conf_get_argument(directive, 1), "id"))
+    (count >= 3 && is_bare_argument(translator, conf_get_argument(directive, 1), "id")) ||
+    block_call_operand
   );
 }
 
@@ -1381,6 +1426,8 @@ static bool translate_sequence_item(
     is_bare_argument(translator, conf_get_argument(next, 1), "id") &&
     (conf_get_argument_count(next) > 2 || has_directive_block(translator, next));
   bool next_has_inline_pairs = has_inline_operator_pairs(translator, next);
+  bool next_has_block_call = has_block_call_operand(translator, next);
+  bool next_has_single_block = has_single_block_operand(translator, next);
   if (
     (
       is_bare_argument(translator, first, "id") ||
@@ -1388,11 +1435,17 @@ static bool translate_sequence_item(
         has_directive_block(translator, directive) &&
         next_operator != NULL &&
         next_operator->value != NULL &&
-        conf_get_argument_count(next) >= 2 &&
         (
-          !is_chainable_operator(next_operator->value) ||
-          next_has_id_marker ||
-          next_has_inline_pairs
+          (
+            conf_get_argument_count(next) >= 2 &&
+            (
+              !is_chainable_operator(next_operator->value) ||
+              next_has_id_marker ||
+              next_has_inline_pairs ||
+              next_has_block_call
+            )
+          ) ||
+          next_has_single_block
         )
       )
     ) &&

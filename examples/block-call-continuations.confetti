@@ -10,3 +10,10 @@ assert {id {sin {pi / 2.0} + 1.0 + 2.0} == 4.0}
 do {id 5}
 + 1 2 3
 assert {id {last-val} == 6}
+
+# The right operand of an infix continuation may also be a function call
+# with its own native argument block. Keep both calls as complete operands.
+assert {id {str-size {id "Hello"} + str-size {id "world"}} == 10}
+assert {id {str-size {id "Hello"} + {str-size {id "world"}}} == 10}
+assert {id {str-size {id "Hi"} + str-size {id " there"} + 1} == 9}
+

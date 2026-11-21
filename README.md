@@ -362,8 +362,13 @@ extra lexical scanning is involved.
 Arithmetic continuations work after any function call with a trailing block,
 not just `id`. For example, `sin {pi / 2.0} - 1.0` subtracts from the result
 of `sin`, whereas a complete prefix call such as `+ 1 2 3` remains a separate
-directive. The translator distinguishes these cases using Confetti’s native
-operator and operand arguments.
+directive. The right operand may itself be a call with a trailing argument
+block, as in `str-size {id "Hello"} + str-size {id "world"}`. This translates
+to `(+ (str-size "Hello") (str-size "world"))`, with both blocks attached to
+their respective function calls. A grouped right operand also works, as in
+`str-size {id "Hello"} + {str-size {id "world"}}`. A standalone prefix call
+such as `+ {id 1; id 2}` remains separate. The translator distinguishes these
+cases using Confetti’s native operator and operand arguments.
 
 A named function call with inline arguments can also precede a comparison
 within one directive:
