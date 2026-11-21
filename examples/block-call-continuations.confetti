@@ -17,3 +17,8 @@ assert {id {str-size {id "Hello"} + str-size {id "world"}} == 10}
 assert {id {str-size {id "Hello"} + {str-size {id "world"}}} == 10}
 assert {id {str-size {id "Hi"} + str-size {id " there"} + 1} == 9}
 
+# A right-hand call with inline arguments remains one infix operand even
+# when its native directive has an odd number of arguments.
+assert {arr-concat {arr 1 2 3; arr 4 5 6; arr 7 8 9} == arr 1 2 3 4 5 6 7 8 9}
+assert {str {id "abc"} == str "a" "b" "c"}
+assert {id {str-size {id "Hello"} + str-size "world"} == 10}

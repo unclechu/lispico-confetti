@@ -382,15 +382,20 @@ Both translate to `(assert (== (div 7.5 2.0) 3.0))`. In the second example,
 the `id` markers are needed because native Confetti subdirectives do not
 interpret `7.5 2.0` as two separate literal arguments.
 
-The right-hand operand can likewise be a function call with inline arguments:
+The right-hand operand can likewise be a function call with inline arguments,
+including calls that take enough arguments to give the operator directive an
+odd number of arguments:
 
 ```confetti
 var "signed" {arr {type i32 0}}
 assert {arr-get "signed" 0 == type i32 0}
 assert {arr-get "signed" 0 == {type i32 0}}
+assert {arr-concat {arr 1 2; arr 3 4} == arr 1 2 3 4}
 ```
 
-Both assertions compare `(arr-get "signed" 0)` with `(type i32 0)`.
+The first two assertions compare `(arr-get "signed" 0)` with `(type i32 0)`.
+The third compares two array-valued calls, preserving all arguments of the
+right-hand `arr` call instead of interpreting `arr` as a variable.
 Between infix operators, one native argument remains an atom, while multiple
 arguments form a function call. For example, `1 + type u32 2 + 3` translates
 to `(+ 1 (type u32 2) 3)`. Operators still cannot be mixed without braces,

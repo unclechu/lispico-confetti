@@ -901,18 +901,19 @@ static bool append_operator_continuation(
   return true;
 }
 
-// A continuation such as `+ str-size {id "Hello"}` has two native
-// arguments and a trailing block. The block belongs to the named right-hand
-// call, not to the operator itself. Do not mistake a numeric prefix argument
-// such as `+ 1 {id 2}` for a function name.
-static bool has_block_call_operand(
+// A right-hand named call may supply its arguments either inline or through
+// a trailing block. In both cases the operator directive is a continuation,
+// even when its native argument count is odd (for example `== arr 1 2 3`).
+// Distinguish function names from numbers, quoted strings, and operators.
+static bool has_named_call_operand(
   ConfettiTranslator *translator,
-  const conf_directive *directive
+  const conf_directive *directive,
+  bool with_block
 ) {
   if (
     directive == NULL ||
-    !has_directive_block(translator, directive) ||
-    conf_get_argument_count(directive) < 2
+    has_directive_block(translator, directive) != with_block ||
+    conf_get_argument_count(directive) < (with_block ? 2 : 3)
   ) return false;
 
   const conf_argument *argument = conf_get_argument(directive, 1);
@@ -961,13 +962,15 @@ static bool begins_operator_continuation(
   ) return false;
 
   long count = conf_get_argument_count(directive);
-  bool block_call_operand = has_block_call_operand(translator, directive);
+  bool named_call_operand =
+    has_named_call_operand(translator, directive, false) ||
+    has_named_call_operand(translator, directive, true);
   if (has_directive_block(translator, directive)) count++;
   return (
     count == 1 ||
     (count >= 2 && count % 2 == 0) ||
     (count >= 3 && is_bare_argument(translator, conf_get_argument(directive, 1), "id")) ||
-    block_call_operand
+    named_call_operand
   );
 }
 
@@ -1426,7 +1429,9 @@ static bool translate_sequence_item(
     is_bare_argument(translator, conf_get_argument(next, 1), "id") &&
     (conf_get_argument_count(next) > 2 || has_directive_block(translator, next));
   bool next_has_inline_pairs = has_inline_operator_pairs(translator, next);
-  bool next_has_block_call = has_block_call_operand(translator, next);
+  bool next_has_named_call =
+    has_named_call_operand(translator, next, false) ||
+    has_named_call_operand(translator, next, true);
   bool next_has_single_block = has_single_block_operand(translator, next);
   if (
     (
@@ -1442,7 +1447,7 @@ static bool translate_sequence_item(
               !is_chainable_operator(next_operator->value) ||
               next_has_id_marker ||
               next_has_inline_pairs ||
-              next_has_block_call
+              next_has_named_call
             )
           ) ||
           next_has_single_block
