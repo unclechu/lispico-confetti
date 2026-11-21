@@ -1,0 +1,49 @@
+# Top-level and ordinary (do) scopes are not function calls.
+assert { id { call-depth } == 0 }
+do {
+  assert { id { call-depth } == 0 }
+  do {
+    assert { id { call-depth } == 0 }
+  }
+}
+
+# Nested calls increment the depth, which is restored on return.
+fn "inner-call-depth" do {
+  assert { id { call-depth } == 2 }
+  do {
+    assert { id { call-depth } == 2 }
+  }
+  call-depth
+}
+fn "outer-call-depth" do {
+  assert { id { call-depth } == 1 }
+  assert { id { inner-call-depth } == 2 }
+  assert { id { call-depth } == 1 }
+  call-depth
+}
+assert { id { outer-call-depth } == 1 }
+assert { id { call-depth } == 0 }
+
+# Recursion uses the same nesting counter as ordinary nested calls.
+fn "recursive-call-depth" { args "n"; do {
+  assert { id { call-depth } == { 4 - n } }
+  if n == 0 {
+    call-depth
+  } else {
+    recursive-call-depth { n - 1 }
+  }
+}}
+assert { recursive-call-depth 3 == 4 }
+assert { id { call-depth } == 0 }
+
+# Leaving a function also restores the caller’s call depth.
+fn "leave-call-depth" { leave 1 { call-depth } }
+assert { id { leave-call-depth } == 1 }
+assert { id { call-depth } == 0 }
+
+# Dynamic function calls also increase the nesting depth.
+fn "dynamic-call-depth" { call-depth }
+fn "invoke-dynamic" { call "dynamic-call-depth" }
+assert { id { invoke-dynamic } == 2 }
+assert { id { call-depth } == 0 }
+assert { call "call-depth" == 0 }

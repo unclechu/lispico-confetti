@@ -1,0 +1,61 @@
+# Concatenate one or more arrays, preserving their order and element type
+assert { arr-concat { arr 1 2 3; arr 4 5 6; arr 7 8 9 } == arr 1 2 3 4 5 6 7 8 9 }
+assert { arr-concat { arr 1 2 3 } == arr 1 2 3 }
+assert { arr-type { arr-concat { arr 1 2; arr 3 4 } } == u32 }
+
+# The same source can be concatenated repeatedly
+var "foo" { arr 1 2 3 }
+assert { arr-concat foo foo == arr 1 2 3 1 2 3 }
+var "copy" { arr-concat foo foo }
+arr-set "foo" 0 99
+assert { copy == arr 1 2 3 1 2 3 }
+arr-set "copy" 1 77
+assert { foo == arr 99 2 3 }
+
+# Signed and floating-point arrays preserve their element types
+assert { arr-concat { arr -1 -2; arr -3 } == arr -1 -2 -3 }
+assert { arr-type { arr-concat { arr -1; arr -2 } } == i32 }
+assert { arr-concat { arr 1.5 2.5; arr 3.5 } == arr 1.5 2.5 3.5 }
+assert { arr-type { arr-concat { arr 1.5; arr 2.5 } } == f32 }
+
+# Empty arrays retain their element type and may occur anywhere
+arr-new "empty-input" u32 0
+assert { arr-size { arr-concat empty-input } == 0 }
+assert { arr-type { arr-concat empty-input empty-input } == u32 }
+assert { arr-concat empty-input { arr 4 5; id empty-input } == arr 4 5 }
+assert { arr-concat { arr 4 5; id empty-input } == arr 4 5 }
+
+# String elements are copied, preserving embedded NUL bytes
+arr-new "words" s 3
+arr-set "words" 0 "a\\0b"
+arr-set "words" 1 "hello"
+var "joined" { arr-concat words words }
+assert { arr-size joined == 6 }
+assert { arr-type joined == s }
+assert { joined == arr "a\\0b" "hello" "" "a\\0b" "hello" "" }
+assert { str-size { arr-get joined 0 } == 3 }
+assert { str-char { arr-get joined 3; id 1 } == 0 }
+assert { str-size { arr-get joined 2 } == 0 }
+arr-set "words" 1 "other"
+arr-set "words" 0 "new"
+assert { arr-get joined 0 == "a\\0b" }
+assert { arr-get joined 1 == "hello" }
+assert { arr-get words 1 == "other" }
+arr-set "joined" 0 "bye"
+assert { arr-get joined 3 == "a\\0b" }
+assert { arr-get words 0 == "new" }
+
+# Joining a zero-initialized string array preserves empty-input entries
+arr-new "empty-words" s 2
+assert { arr-concat empty-words { arr "last" } == arr "" "" "last" }
+
+# Values remain alive when their original variable is reset and GC runs
+var "original" { arr "first" "second" }
+var "result" { arr-concat original original }
+reset "original"
+gc
+assert { result == arr "first" "second" "first" "second" }
+
+# The result can be expanded into arguments with (apply)
+fn "sum-five" { args "a" "b" "c" "d" "e"; id { + a b c d e } }
+assert { apply "sum-five" { arr-concat { arr 1 2; arr 3 4 5 } } == 15 }

@@ -1,0 +1,19 @@
+# A goto from a user-defined function may target a top-level label.
+# Recursive calls unwind every local scope and execute their defers first.
+var "reached" false
+var "defers" 0
+fn "escape" { args "n"; do {
+  local "text" { str "private-" { type s n } }
+  defer { set "defers" { defers + 1 } }
+  if n > 0 { escape { n - 1 } }
+  goto finished
+}}
+label "finished"
+if reached do {
+  assert { defers == 4 }
+  gc
+  exit 0 42
+}
+set "reached" true
+escape 3
+assert false

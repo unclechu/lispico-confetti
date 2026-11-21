@@ -1,0 +1,113 @@
+# Local variables shadow globals without modifying them
+var "value" 100
+var "message" "global"
+do {
+  local "value" 10
+  assert { value == 10 }
+  assert { get "value" == 10 }
+  assert { get { str "va" "lue" } == 10 }
+  local "value" 20
+  assert { value == 20 }
+  set "value" 21
+  assert { value == 21 }
+
+  do {
+    assert { value == 21 }
+    local "value" 30
+    assert { value == 30 }
+    set "value" 31
+    assert { get "value" == 31 }
+  }
+
+  assert { value == 21 }
+  local "message" "local"
+  assert { message == "local" }
+  defer { assert { message == "local" } }
+}
+assert { value == 100 }
+assert { message == "global" }
+
+# Named string and array operations also use upward scope lookup
+var "array" { arr 100 200 }
+do {
+  local-str-new "message" 5
+  str-set "message" "Hello"
+  assert { str-get "message" 1 == 101 }
+  str-resize "message" 7
+  assert { str-size message == 7 }
+  str-set "message" "Goodbye"
+  assert { message == "Goodbye" }
+
+  local-arr-new "array" u32 3
+  assert { arr-size "array" == 3 }
+  assert { arr-type "array" == u32 }
+  arr-set "array" 0 5
+  arr-set "array" 1 6
+  assert { arr-get "array" 0 == 5 }
+  assert { arr-get array 1 == 6 }
+  set "array" { arr 7 8 9 }
+  assert { array == arr 7 8 9 }
+  assert { kind-of "array" == arr-kind }
+  freeze "array"
+  assert { is-frozen "array" == true }
+}
+assert { message == "global" }
+assert { array == arr 100 200 }
+
+# Local values can change type, including from arrays to scalars
+do {
+  local "x" { arr 1 2 }
+  assert { x == arr 1 2 }
+  local "x" "string"
+  assert { x == "string" }
+  local-arr-new "x" s 2
+  arr-set "x" 0 "hello"
+  assert { arr-get x 0 == "hello" }
+  local "x" 42
+  assert { x == 42 }
+  reset "x"
+  assert { type-of x == void }
+}
+
+# The value returned by a (do) stays valid after its local is reset
+assert {
+  do {
+    local "returned" "Hello"
+    id returned
+  } == "Hello"
+}
+assert {
+  str {
+    do { local "returned" "World"; id returned }
+    do { gc; id "!" }
+  } == "World!"
+}
+
+# A local created by (defer) belongs to the same enclosing (do)
+do {
+  local "x" 1
+  defer { assert { deferred == 2 } }
+  defer { local "deferred" 2 }
+}
+
+# Re-entering the same expression creates a fresh activation of its locals
+var "round-iter" 0
+do {
+  label "local-again"
+  local "counter" round-iter
+  assert { counter == round-iter }
+  freeze "counter"
+  set "round-iter" { round-iter + 1 }
+}
+if round-iter < 2 { goto local-again }
+assert { round-iter == 2 }
+
+# Defining global variables inside a (do) does not turn them into locals
+do { var "global-from-do" 123 }
+assert { global-from-do == 123 }
+do {
+  local "global-from-do" 456
+  override "global-from-do" 789
+  assert { global-from-do == 456 }
+}
+assert { global-from-do == 789 }

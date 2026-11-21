@@ -1,0 +1,38 @@
+# Resetting a scalar keeps its name but changes its actual type to TYPE_VOID
+var "number" 42
+assert { type-of { reset "number" } == void }
+assert { type-of number == void }
+assert { type-of { get "number" } == void }
+assert { kind-of "number" == var-kind }
+assert { type-of { reset "number" } == void } # Resetting twice is allowed
+override "number" 123
+assert { number == 123 }
+
+# Resetting does not collect memory automatically
+var "message" "Hello"
+assert { type-of { reset "message" } == void }
+assert { id { gc } == 1 } # The old string buffer is now unreachable
+assert { id { gc } == 0 }
+override "message" "World"
+assert { message == "World" }
+
+# Resetting an array drops its backing storage and any string element buffers
+var "words" { arr "First" "Second" }
+assert { id { gc } == 3 } # Discarded temporary array and its string buffers
+assert { kind-of "words" == arr-kind }
+reset "words"
+assert { kind-of "words" == var-kind }
+assert { type-of words == void }
+assert { id { gc } == 3 } # The named array and its string buffers
+
+# A reset cannot make a string unreachable while an expression still holds it
+assert {
+  str {
+    id message
+    do {
+      reset "message"
+      assert { id { gc } == 0 }
+      id "!"
+    }
+  } == "World!"
+}

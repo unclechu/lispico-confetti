@@ -1,0 +1,38 @@
+# Resolve scalar variables using literal and computed names.
+var "answer" 42
+assert { get "answer" == answer }
+assert { get { str "ans" "wer" } == 42 }
+var "name" "answer"
+assert { get name == 42 }
+assert { get { get "name" } == 42 }
+
+# Reads observe the current value, including frozen variables.
+set "answer" 123
+assert { get name == 123 }
+freeze "answer"
+assert { get "answer" == 123 }
+
+# Scalar strings and signed and floating-point values retain their types.
+var "message" "Hello"
+assert { get "message" == message }
+var "signed" -123
+assert { get "signed" == signed }
+var "float" 1.5
+assert { get "float" == float }
+
+# An array reference is equivalent to using the array name directly.
+var "numbers" { arr 10 20 30 }
+assert { arr-size { get "numbers" } == arr-size numbers }
+assert { arr-get { get "numbers"; id 1 } == 20 }
+arr-set "numbers" 1 99
+assert { arr-get { get "numbers"; id 1 } == 99 }
+assert { get "numbers" == numbers }
+
+# Labels can also be read using their names.
+label "here"
+assert { show { get "here" } == show here }
+
+# The evaluated name remains accessible across garbage collection.
+assert { get do { gc; str "ans" "wer" } == 123 }
+
+get "answer"

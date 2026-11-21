@@ -1,0 +1,91 @@
+# An explicit result replaces the last evaluated value
+assert {
+  do {
+    id 10
+    leave 1 20
+    id 30
+  } == 20
+}
+
+# The explicit value can be an evaluated expression
+assert {
+  do {
+    leave 1 { 20 + 22 }
+  } == 42
+}
+
+# (last-val) preserves the previous value, like (leave 1)
+assert {
+  do {
+    id 123
+    leave 1 { last-val }
+  } == 123
+}
+
+# An explicit result propagates through multiple (do) sequences
+assert {
+  do {
+    do {
+      leave 2 { str "hello" " world" }
+      exit 1 "Should not execute"
+    }
+    exit 1 "Should not execute"
+  } == "hello world"
+}
+
+# The value may be an array
+assert {
+  do {
+    leave 1 { arr 1 2 3 }
+  } == arr 1 2 3
+}
+
+# The explicit result can also be empty
+assert {
+  type-of do {
+    id 123
+    leave 1 empty
+  } == void
+}
+
+# Evaluate the value exactly once before leaving
+var "calls" 0
+assert {
+  do {
+    leave 1 { set "calls" { calls + 1 } }
+  } == 1
+}
+assert { calls == 1 }
+
+# (defer) cannot replace the explicit result, even when it runs (gc)
+var "cleanup-count" 0
+assert {
+  do {
+    defer do {
+      gc
+      set "cleanup-count" { cleanup-count + 1 }
+    }
+    leave 1 { str "a" "bc" }
+  } == "abc"
+}
+assert { cleanup-count == 1 }
+
+# Defers in both terminated sequences run before evaluation continues
+assert {
+  do {
+    defer { set "cleanup-count" { cleanup-count + 1 } }
+    do {
+      defer { set "cleanup-count" { cleanup-count + 1 } }
+      leave 2 77
+    }
+  } == 77
+}
+assert { cleanup-count == 3 }
+
+# A nested (leave) in the value expression propagates normally
+assert {
+  do {
+    leave 1 { leave 1 100 }
+    id 200
+  } == 100
+}

@@ -1,0 +1,71 @@
+# Recursive calls restore argument bindings and explicit (do) locals
+fn "factorial" { args "n"; do {
+  local "saved" n
+  if n <= 1 {
+    id 1
+  } else {
+    factorial { n - 1 } * saved
+  }
+}}
+assert { factorial 6 == 720 }
+assert { call "factorial" 5 == 120 }
+
+# Mutual recursion keeps the caller’s arguments and result intact
+fn "even-number" { args "n"
+  if n == 0 {
+    id true
+  } else {
+    odd-number { n - 1 }
+  }
+}
+fn "odd-number" { args "n"
+  if n == 0 {
+    id false
+  } else {
+    even-number { n - 1 }
+  }
+}
+assert { even-number 10 == true }
+assert { odd-number 11 == true }
+
+# Recursive calls preserve the entire local value, including frozen flags,
+# string buffers, and arrays with independently allocated string elements.
+fn "preserve-locals" { args "n"; do {
+  local "text" { str "text-" { type s n } }
+  local "words" { arr { str "word-" { type s n }; id "other" } }
+  freeze "text"
+  defer { gc }
+  if n > 0 do {
+    preserve-locals { n - 1 }
+    gc
+    assert { text == str "text-" { type s n } }
+    assert { words == arr { str "word-" { type s n }; id "other" } }
+    assert { is-frozen "text" }
+  }
+  id text
+}}
+assert { preserve-locals 5 == "text-5" }
+
+# Argument count, zero-indexed argument access, and last-value histories
+# are independent for each recursive activation.
+fn "argument-frames" { var-args "n"; do {
+  assert { argc == 2 }
+  assert { get-arg 0 == n }
+  assert { get-arg 1 == "extra" }
+  if n == 0 { leave 2 100 }
+  local "saved" n
+  local "recursive-result" { argument-frames { n - 1; id "extra" } }
+  assert { saved == n }
+  recursive-result + 1
+}}
+assert { argument-frames 4 "extra" == 104 }
+
+# An intermediate activation may not declare a local owned by an older
+# activation. A deeper call must still preserve that older value.
+fn "skipped-local" { args "n"; do {
+  if n == 2 { local "text" "outer" }
+  if n == 0 { local "text" "inner" }
+  if n > 0 { skipped-local { n - 1 } }
+  if n == 2 { assert { text == "outer" } }
+}}
+skipped-local 2

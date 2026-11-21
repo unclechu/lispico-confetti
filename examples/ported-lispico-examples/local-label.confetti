@@ -1,0 +1,123 @@
+# Local labels resolve through the same scope chain as local variables.
+var "loop-count" 0
+do {
+  local-label "loop"
+  set "loop-count" { loop-count + 1 }
+  if loop-count < 3 { goto loop }
+  assert { loop-count == 3 }
+}
+
+# Shadow a global label without changing its destination.
+var "global-visit" 0
+label "common"
+do {
+  local "local-visit" 0
+  local-label "common"
+  set "local-visit" { local-visit + 1 }
+  if local-visit < 2 { goto common }
+  assert { local-visit == 2 }
+}
+if global-visit == 0 do {
+  set "global-visit" 1
+  goto common
+}
+assert { global-visit == 1 }
+
+# Nested labels of the same name shadow their enclosing definitions.
+do {
+  local "outer-count" 0
+  local-label "again"
+  set "outer-count" { outer-count + 1 }
+  do {
+    local "inner-count" 0
+    local-label "again"
+    set "inner-count" { inner-count + 1 }
+    if inner-count < 2 { goto again }
+    assert { inner-count == 2 }
+  }
+  if outer-count < 2 { goto again }
+  assert { outer-count == 2 }
+}
+
+# Function calls may share local label names without collisions.
+fn "helper" { args "n"; do {
+  local "i" 0
+  local-label "loop"
+  set "i" { i + 1 }
+  if i < n { goto loop }
+  id i
+}}
+
+fn "work" { args "n"; do {
+  local "i" 0
+  local-label "loop"
+  set "i" { i + 1 }
+  assert { helper i == i }
+  if i < n { goto loop }
+  id i
+}}
+assert { work 4 == 4 }
+
+# Recursion restores the previous activation’s label and local variables.
+fn "recur" { args "n"; do {
+  local "i" 0
+  local-label "loop"
+  set "i" { i + 1 }
+  if n > 0 { assert { recur { n - 1 } == 2 } }
+  if i < 2 { goto loop }
+  id i
+}}
+assert { recur 3 == 2 }
+
+# Label names can be computed and read using (get).
+do {
+  local "dynamic-visits" 0
+  local-label { str "dy" "namic" }
+  set "dynamic-visits" { dynamic-visits + 1 }
+  if dynamic-visits < 2 { goto { get "dynamic" } }
+  assert { dynamic-visits == 2 }
+}
+
+# Local labels in (if) branches remain reachable after the condition changes.
+var "branch-enabled" true
+var "branch-visits" 0
+do {
+  if branch-enabled { local-label "branch-loop" }
+  set "branch-visits" { branch-visits + 1 }
+  set "branch-enabled" false
+  if branch-visits < 2 { goto branch-loop }
+}
+assert { branch-visits == 2 }
+
+# Frozen labels can be revisited, and cleanup allows re-entry.
+var "reentries" 0
+do {
+  label "reentry-trigger"
+  local-label "entry"
+  freeze "entry"
+  set "reentries" { reentries + 1 }
+}
+if reentries < 2 { goto reentry-trigger }
+assert { reentries == 2 }
+
+# A frozen local label can be re-evaluated at its original expression.
+var "frozen-visits" 0
+do {
+  local-label "frozen-entry"
+  freeze "frozen-entry"
+  set "frozen-visits" { frozen-visits + 1 }
+  if frozen-visits < 2 { goto frozen-entry }
+}
+assert { frozen-visits == 2 }
+
+# An inner scope may jump to a label in its enclosing scope.
+do {
+  local "outer-visits" 0
+  local-label "outer-entry"
+  set "outer-visits" { outer-visits + 1 }
+  do {
+    local-label "inner-entry"
+    if outer-visits < 2 { goto outer-entry }
+  }
+  assert { outer-visits == 2 }
+}

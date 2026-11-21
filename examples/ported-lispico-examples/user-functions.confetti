@@ -1,0 +1,168 @@
+# Function definitions use public labels and their original expression bodies
+fn "sum" { args "one" "two"; one + two }
+assert { sum 10 20 == 30 }
+assert { id { sum 2 3 + 5 } == 10 }
+assert { call "sum" 4 5 == 9 }
+assert { kind-of "_FN_sum" == label-kind }
+
+# Function names are evaluated when the definition is encountered
+fn { str "dou" "ble"; args "x"; x * 2 }
+assert { double 21 == 42 }
+
+# User functions take precedence over native functions of the same name
+fn "str-size" { args "x"; x + 100 }
+assert { str-size 7 == 107 }
+assert { call "str-size" 8 == 108 }
+
+# Native functions are still available when no matching function label exists
+assert { call "str-len" "hello" == 5 }
+
+# A body can be one expression, with or without named arguments
+fn "answer" 42
+assert { id { answer } == 42 }
+fn "ignore" { args "unused"; id 12 }
+assert { ignore 100 == 12 }
+
+# Arguments are copied into the function’s implicit local scope
+var "word" "hello"
+fn "change-word" { args "word"; do {
+  str-set "word" 0 "X"
+  id word
+}}
+assert { change-word word == "Xello" }
+assert { word == "hello" }
+
+var "numbers" { arr 1 2 3 }
+fn "change-array" { args "numbers"; do {
+  arr-set "numbers" 0 9
+  id numbers
+}}
+assert { change-array numbers == arr 9 2 3 }
+assert { numbers == arr 1 2 3 }
+
+# Calls use definition-site scope, not the caller’s current (do) scope
+var "x" 100
+fn "read-x" x
+do {
+  local "x" 200
+  assert { id { read-x } == 100 }
+}
+
+# The implicit argc is local, so global argc is left untouched
+var "argc-before" argc
+fn "count" { var-args; id argc }
+assert { id { count } == 0 }
+assert { count 1 2 3 == 3 }
+assert { argc == argc-before }
+
+# Explicit argc arguments shadow the implicit argument count
+fn "shadow-count" { args "argc"; id argc }
+assert { shadow-count 321 == 321 }
+assert { argc == argc-before }
+
+# Variadic functions can also declare required named arguments
+fn "select-arg" { var-args "first" "second"; do {
+  assert { first == 11 }
+  assert { second == 22 }
+  assert { argc == 4 }
+  assert { get-arg 0 == 11 }
+  assert { get-arg 2 == "hello" }
+  get-arg 3
+}}
+assert { select-arg 11 22 "hello" 44 == 44 }
+fn "last-arg" { var-args; get-arg { argc - 1 } }
+assert { last-arg 10 20 30 == 30 }
+
+# A no-argument function’s last value comes from its own body
+fn "own-last" do {
+  id 10
+  last-val
+}
+assert {
+  do {
+    id 999
+    own-last
+  } == 10
+}
+
+# The implicit sequence is a valid (leave) destination
+fn "leave-immediately" { leave 1 42 }
+assert { id { leave-immediately } == 42 }
+fn "leave-nested" { args "x"; do {
+  if x > 10 do {
+    leave 3 { x + 1 }
+  }
+  id x
+}}
+assert { leave-nested 12 == 13 }
+assert { leave-nested 9 == 9 }
+
+# User defers run before the implicit scope resets local values
+var "deferred-result" 0
+fn "with-defer" { args "value"; do {
+  local "other" { value + 1 }
+  defer { set "deferred-result" other }
+  id value
+}}
+assert { with-defer 10 == 10 }
+assert { deferred-result == 11 }
+assert { with-defer 20 == 20 }
+assert { deferred-result == 21 }
+
+# Returned values survive local cleanup and a later manual GC
+fn "make-string" { args "suffix"; do {
+  local "text" { str "hello" suffix }
+  id text
+}}
+assert { make-string " world" == "hello world" }
+assert {
+  str {
+    make-string "!"
+    do {
+      gc
+      id " good"
+    }
+  } == "hello! good"
+}
+
+# Local variables can be frozen and reset on the next invocation
+fn "frozen-local" { args "x"; do {
+  local "temp" x
+  freeze "temp"
+  id temp
+}}
+assert { frozen-local 5 == 5 }
+assert { frozen-local 6 == 6 }
+
+# Label and TYPE_VOID arguments retain their original kind and type
+fn "label-kind" { args "target"; kind-of "target" }
+assert { label-kind _FN_sum == label-kind }
+fn "void-type" { args "value"; type-of value }
+assert {
+  void-type do {
+    local "temporary" 42
+    reset "temporary"
+    id temporary
+  } == void
+}
+
+# Public function labels can be updated like ordinary labels
+fn "redefined" 1
+assert { id { redefined } == 1 }
+fn "redefined" 2
+assert { id { redefined } == 2 }
+
+# Nested calls retain their own current arguments and last-result state
+fn "inner" { args "arg"; do {
+  assert { argc == 1 }
+  assert { get-arg 0 == arg }
+  arg + 1
+}}
+fn "outer" { args "arg"; do {
+  local "saved" arg
+  assert { inner { get-arg 0 } == { saved + 1 } }
+  assert { argc == 1 }
+  assert { get-arg 0 == saved }
+  id saved
+}}
+assert { outer 8 == 8 }

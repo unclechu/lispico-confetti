@@ -1,0 +1,65 @@
+# Append a single typed array as individual function arguments.
+assert { apply "+" { arr 1 2 3 } == 6 }
+assert { apply "+" 10 20 { arr 1 2 3 } == 36 }
+assert { apply { str "str-" "size"; arr "hello" } == 5 }
+assert { call "apply" "+" 10 { arr 20 30 } == 60 }
+
+# Fixed arguments can differ in type from the array elements.
+fn "inspect" { var-args; do {
+  assert { argc == 5 }
+  assert { get-arg 0 == "prefix" }
+  assert { get-arg 1 == 99 }
+  assert { get-arg 2 == "abc" }
+  assert { get-arg 3 == "d\0e" }
+  assert { get-arg 4 == "" }
+  id argc
+}}
+assert { apply "inspect" "prefix" 99 { arr "abc" "d\0e" "" } == 5 }
+
+# Numeric array element types are preserved.
+fn "read-types" { var-args; do {
+  assert { get-arg 0 == -1 }
+  assert { get-arg 1 == -2 }
+  assert { get-arg 2 == 3.5 }
+  assert { get-arg 3 == 4.5 }
+  id argc
+}}
+assert { apply "read-types" -1 -2 { arr 3.5 4.5 } == 4 }
+
+# A zero-length array adds no arguments.
+arr-new "empty-tail" u32 0
+fn "no-arguments" argc
+assert { apply "no-arguments" empty-tail == 0 }
+assert { apply "+" 10 20 empty-tail == 30 }
+
+# One array may be a fixed argument; only the final array is expanded.
+fn "two-arrays" { args "whole" "item"; do {
+  assert { whole == arr 1 2 }
+  id item
+}}
+assert { apply "two-arrays" { arr 1 2; arr 3 } == 3 }
+
+# The expanded array may contain zero-initialized empty string slots.
+arr-new "empty-strings" s 2
+fn "check-empty-strings" { var-args; do {
+  assert { argc == 2 }
+  assert { get-arg 0 == "" }
+  assert { get-arg 1 == "" }
+  id true
+}}
+assert { apply "check-empty-strings" empty-strings }
+
+# The array values stay reachable if the called function invokes (gc).
+fn "collect-in-call" { var-args; do {
+  gc
+  assert { get-arg 0 == "Hello" }
+  assert { get-arg 1 == "world" }
+  str-size { get-arg 0 } + str-size { get-arg 1 }
+}}
+assert { apply "collect-in-call" { arr { str "Hel" "lo"; id "world" } } == 10 }
+
+# Expanded arguments share the ordinary 32-slot limit, including the name.
+arr-new "maximum-tail" u32 31
+assert { apply "+" maximum-tail == 0 }
+
+apply "+" 10 20 { arr 1 2 3 }

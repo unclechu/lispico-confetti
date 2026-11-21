@@ -370,6 +370,40 @@ their respective function calls. A grouped right operand also works, as in
 such as `+ {id 1; id 2}` remains separate. The translator distinguishes these
 cases using Confetti’s native operator and operand arguments.
 
+**Operator continuation uses heuristics, not an explicit statement boundary.**
+When neighboring Confetti directives look like an infix expression, the
+translator may combine them, even when the original source separates them
+with a semicolon. For example, a directive with a trailing `{ … }` block can
+consume a following `+ a b c d e` as an infix continuation: the `+` is not
+necessarily treated as a separate prefix function call. The translator uses
+the native directive structure and operator/operand shapes to resolve such
+ambiguities; some complete prefix calls, such as `+ 1 2 3`, remain separate.
+
+**To force an operator to be called as a regular prefix function, wrap the
+call in `id { … }`.** The wrapper prevents it from being mistaken for an
+infix continuation of the preceding directive:
+
+```confetti
+# Ambiguous: the + can continue the preceding blocked directive.
+args {foo}; + a b c d e
+
+# Explicitly separate expressions: call + as a prefix function.
+args {foo}
+id {+ a b c d e}
+```
+
+For example, a function with five named arguments can use the same pattern:
+
+```confetti
+fn "sum-five" {
+  args "a" "b" "c" "d" "e"
+  id {+ a b c d e}
+}
+```
+
+The `id` wrapper only makes the operator call unambiguous; it does not
+introduce a new Lispico scope or change the call’s arguments or result.
+
 A named function call with inline arguments can also precede a comparison
 within one directive:
 

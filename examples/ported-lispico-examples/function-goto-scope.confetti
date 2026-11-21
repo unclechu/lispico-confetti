@@ -1,0 +1,17 @@
+# A function can jump out to an already reachable enclosing (do) sequence.
+fn "jump-out" do {
+  local "value" "private"
+  defer { set "defers" { defers + 1 } }
+  goto again
+}
+var "defers" 0
+var "phase" 0
+do {
+  label "again"
+  if phase == 1 { leave 1 }
+  set "phase" 1
+  jump-out
+  assert false
+}
+assert { defers == 1 }
+assert { phase == 1 }

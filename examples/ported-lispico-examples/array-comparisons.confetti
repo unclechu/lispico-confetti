@@ -1,0 +1,61 @@
+# Array equality requires the same element type and compares each element
+assert { arr 1 2 3 == arr 1 2 3 }
+assert { arr 1 2 3 != arr 1 2 4 }
+assert { id { arr 1 2 3 == arr 1 2 4 } == false }
+assert { id { arr 1 2 3 != arr 1 2 3 } == false }
+assert { arr 1 2 != arr 1 2 3 }
+assert { id { arr 1 2 == arr 1 2 3 } == false }
+assert { type-of { arr 1 2 == arr 1 2 } == u32 }
+assert { type-of { arr 1 2 != arr 1 2 } == u32 }
+
+# Signed integers and floating-point numbers use scalar equality
+assert { arr -1 -2 -3 == arr -1 -2 -3 }
+assert { arr -1 -2 -3 != arr -1 -2 -4 }
+assert { arr 0.0 1.5 -2.5 == arr 0.0 1.5 -2.5 }
+assert { arr 0.0 1.5 -2.5 != arr 0.0 1.5 2.5 }
+assert { arr 0.0 == arr -0.0 }
+
+# String elements are compared by length and contents, including NUL bytes
+assert { arr "Hello" "a\\0b" "" == arr "Hello" "a\\0b" "" }
+assert { arr "Hello" "a\\0b" "" != arr "hello" "a\\0b" "" }
+assert { arr "a\\0b" != arr "a\\0c" }
+assert { arr "a\\0b" != arr "a\\0b\\0" }
+assert { arr "a\\0b" != arr "a" }
+assert { arr "" "" == arr "" "" }
+
+# Named arrays, anonymous values, and independent copies compare by contents
+var "original" { arr 10 20 30 }
+var "copy" original
+assert { original == copy }
+assert { original == arr 10 20 30 }
+arr-set "copy" 1 21
+assert { original != copy }
+assert { original == arr 10 20 30 }
+assert { id { original == copy } == false }
+
+# Zero-length arrays compare equal only when their element types match
+arr-new "empty-u32" u32 0
+arr-new "empty-u32-copy" u32 0
+arr-new "empty-strings" s 0
+assert { empty-u32 == empty-u32-copy }
+assert { id { empty-u32 == empty-u32-copy } == true }
+assert { id { empty-u32 != empty-u32-copy } == false }
+assert { empty-strings == empty-strings }
+assert { arr 1 != empty-u32 }
+
+# Zero-initialized string elements compare as empty strings
+arr-new "blank-strings" s 2
+arr-new "blank-strings-copy" s 2
+assert { blank-strings == blank-strings-copy }
+arr-set "blank-strings" 1 "a\\0b"
+assert { blank-strings != blank-strings-copy }
+arr-set "blank-strings-copy" 1 "a\\0b"
+assert { blank-strings == blank-strings-copy }
+
+# Previously supported scalar comparisons are unchanged
+assert { 12 == 12 }
+assert { 12 != 13 }
+assert { "a\\0b" == "a\\0b" }
+assert { "a\\0b" != "a\\0c" }
+assert { "abc" < "abd" }
+assert { 2.0 >= 2.0 }
