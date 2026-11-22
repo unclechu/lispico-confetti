@@ -1,0 +1,11 @@
+include "include-files/functions.confetti"
+assert { id { square 7 } == 49 }
+assert { id { + 1 { include "include-files/arguments.confetti"; id 5 } } == 15 }
+do {
+  local "x" 1
+  include "include-files/sequence.confetti"
+  assert { x == 5 }
+}
+include "include-files/empty.confetti"
+include "include-files/functions.confetti"
+assert { id { square 3 } == 9 }
