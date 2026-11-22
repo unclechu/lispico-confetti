@@ -1,1 +1,4 @@
-Parse error: Mixed or unsupported infix operators; use nested { … } groups
+[FAIL] Parsing failed: examples/fail/id-mixed-operators.confetti:2:9: Mixed or unsupported infix operators; use nested { … } groups
+1 | # Adjacent operator directives cannot mix operations without nested blocks.
+2 | assert {id {gc} + 1 * 2}
+  |         ↑

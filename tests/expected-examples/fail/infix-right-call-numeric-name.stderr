@@ -1,1 +1,4 @@
-Parse error: Expected a function name at operand start
+[FAIL] Parsing failed: examples/fail/infix-right-call-numeric-name.confetti:2:9: Expected a function name at operand start
+1 | # Multiple arguments on an infix side must begin with a function name.
+2 | assert {1 == 2 3}
+  |         ↑

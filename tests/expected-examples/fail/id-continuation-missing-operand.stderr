@@ -1,1 +1,3 @@
-Parse error: Operator continuation needs an operand
+[FAIL] Parsing failed: examples/fail/id-continuation-missing-operand.confetti:1:12: Operator continuation needs an operand
+1 | var "bad" {id {1 + 2} +} # Missing operand after a continuation operator
+  |            ↑

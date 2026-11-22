@@ -1,1 +1,4 @@
-Parse error: Mixed or unsupported infix operators; use nested { … } groups
+[FAIL] Parsing failed: examples/fail/infix-right-call-mixed.confetti:2:9: Mixed or unsupported infix operators; use nested { … } groups
+1 | # An operator inside a right-hand function call still delimits operands.
+2 | assert {1 == type u32 1 + 0}
+  |         ↑

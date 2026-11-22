@@ -1,1 +1,3 @@
-Parse error: Expected a function name at directive start
+[FAIL] Parsing failed: examples/fail/infix-unsupported-operator.confetti:1:12: Expected a function name at directive start
+1 | var "bad" {1 % 2}
+  |            ↑

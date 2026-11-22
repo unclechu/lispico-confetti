@@ -1,16 +1,47 @@
+#define _POSIX_C_SOURCE 200809L
+
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "../confetti/confetti.h"
 #include "../lispico/src/expression.h"
 #include "../lispico/src/number.h"
+#include "../lispico/src/wipe-memory.h"
 #include "confetti-translate.h"
+
+// Track active files by filesystem identity, not by the spelling of their
+// paths. Repeated includes are allowed; only an active cycle is rejected.
+typedef struct ConfettiIncludeFrame {
+  dev_t device;
+  ino_t inode;
+  const struct ConfettiIncludeFrame *previous;
+} ConfettiIncludeFrame;
+
+typedef struct {
+  SourceRegistry *registry;
+  const ConfettiIncludeFrame *active;
+} ConfettiIncludeContext;
+
+// A sequence of sibling expressions. An include can contribute any number of
+// expressions without creating a wrapper node or introducing another scope.
+typedef struct {
+  uint32_t first;
+  uint32_t last;
+} ConfettiExpressions;
 
 typedef struct {
   Interpreter *interpreter;
   const char *source;
   size_t source_length;
+  const char *path;
+  uint32_t source_id;
+  ConfettiIncludeContext *includes; // NULL for the original parser API.
+  ParseDiagnostic *diagnostic;
   char (*error)[ERR_MSG_SIZE];
 
   // Cache the last source position while assigning optional source locations.
@@ -18,6 +49,81 @@ typedef struct {
   uint32_t location_scan_line;
   uint32_t location_scan_column;
 } ConfettiTranslator;
+
+// Convert an original source byte offset to a line and byte column. This is
+// also used for parse failures with source mapping disabled.
+static ExpressionSourceLocation confetti_source_location(
+  const ConfettiTranslator *translator,
+  size_t offset
+) {
+  if (offset > translator->source_length) offset = translator->source_length;
+  uint32_t line = 1;
+  uint32_t column = 1;
+  for (size_t i = 0; i < offset; ++i) {
+    if (translator->source[i] == '\n') {
+      ++line;
+      column = 1;
+    } else {
+      ++column;
+    }
+  }
+  return (ExpressionSourceLocation) {
+    .source_id = translator->source_id,
+    .byte_offset = (uint32_t)offset,
+    .line = line,
+    .column = column,
+  };
+}
+
+static void confetti_record_failure(ConfettiTranslator *translator, size_t offset) {
+  if (translator->diagnostic == NULL || translator->diagnostic->has_location) return;
+  translator->diagnostic->has_location = true;
+  translator->diagnostic->location = confetti_source_location(translator, offset);
+  snprintf(
+    translator->diagnostic->path,
+    sizeof(translator->diagnostic->path),
+    "%s",
+    translator->path != NULL ? translator->path : "/dev/stdin"
+  );
+}
+
+static void append_confetti_expressions(
+  Interpreter *interpreter,
+  ConfettiExpressions *sequence,
+  ConfettiExpressions added
+) {
+  if (added.first == EXPR_NONE) return;
+  if (sequence->first == EXPR_NONE)
+    sequence->first = added.first;
+  else
+    interpreter->storage.expressions[sequence->last].next = added.first;
+  sequence->last = added.last;
+}
+
+// Append a range to the children of a list, preserving original sibling links.
+static void append_confetti_children(
+  Interpreter *interpreter,
+  uint32_t parent,
+  uint32_t *previous,
+  ConfettiExpressions added
+) {
+  if (added.first == EXPR_NONE) return;
+  if (*previous == EXPR_NONE)
+    interpreter->storage.expressions[parent].first_child = added.first;
+  else
+    interpreter->storage.expressions[*previous].next = added.first;
+  *previous = added.last;
+}
+
+static bool translate_confetti_unit(
+  ConfettiTranslator *translator,
+  ConfettiExpressions *result
+);
+static bool translate_confetti_include(
+  ConfettiTranslator *translator,
+  const conf_directive *directive,
+  ConfettiExpressions *result
+);
 
 // Confetti’s argument lexeme offsets refer to the original source buffer.
 // Advance through that buffer only when a source-map table was supplied.
@@ -49,6 +155,7 @@ static void record_source_location(
   }
 
   locations[index] = (ExpressionSourceLocation) {
+    .source_id = translator->source_id,
     .byte_offset = (uint32_t)byte_offset,
     .line = translator->location_scan_line,
     .column = translator->location_scan_column,
@@ -151,20 +258,20 @@ static bool new_name(
 
 // Confetti removes its own escape layer first. Decode surviving backslashes
 // according to Lispico’s string rules, preserving the explicit byte length.
-static bool translate_string_value(
+static bool decode_confetti_string(
   ConfettiTranslator *translator,
   const char *value,
   size_t value_length,
   size_t byte_offset,
-  uint32_t *index
+  char (*text)[EXPR_TEXT_SIZE],
+  size_t *length
 ) {
   if (value_length >= EXPR_TEXT_SIZE) {
     snprintf(*translator->error, ERR_MSG_SIZE, "String literal is too long");
     return false;
   }
 
-  char text[EXPR_TEXT_SIZE] = {'\0'};
-  size_t length = 0;
+  *length = 0;
 
   for (size_t i = 0; i < value_length; ++i) {
     char c = value[i];
@@ -200,11 +307,30 @@ static bool translate_string_value(
           return false;
       }
     }
-    text[length] = c;
-    length++;
+    (*text)[*length] = c;
+    (*length)++;
   }
-  text[length] = '\0';
+  (*text)[*length] = '\0';
+  return true;
+}
 
+static bool translate_string_value(
+  ConfettiTranslator *translator,
+  const char *value,
+  size_t value_length,
+  size_t byte_offset,
+  uint32_t *index
+) {
+  char text[EXPR_TEXT_SIZE] = {'\0'};
+  size_t length = 0;
+  if (!decode_confetti_string(
+    translator,
+    value,
+    value_length,
+    byte_offset,
+    &text,
+    &length
+  )) return false;
   if (!new_expression(translator, EXPR_STRING, byte_offset, index)) return false;
   return store_text(
     translator,
@@ -344,7 +470,7 @@ static bool translate_indexed_operation(
   uint32_t *index
 );
 
-static bool translate_argument(
+static bool translate_argument_impl(
   ConfettiTranslator *translator,
   const conf_argument *argument,
   uint32_t *index
@@ -374,6 +500,18 @@ static bool translate_argument(
       return translate_bare_atom(translator, text, length, argument->lexeme_offset, index);
     }
   }
+}
+
+// Record the innermost argument's original position for translation errors.
+// The surrounding directive wrapper handles errors outside argument parsing.
+static bool translate_argument(
+  ConfettiTranslator *translator,
+  const conf_argument *argument,
+  uint32_t *index
+) {
+  if (translate_argument_impl(translator, argument, index)) return true;
+  if (argument != NULL) confetti_record_failure(translator, argument->lexeme_offset);
+  return false;
 }
 
 // Check whether a Confetti argument is an unquoted literal matching `name`.
@@ -589,7 +727,7 @@ static bool translate_sequence_item(
   ConfettiTranslator *translator,
   const conf_directive *container,
   long *position,
-  uint32_t *index
+  ConfettiExpressions *result
 );
 
 // Append all native subdirectives as operands of an infix call. Each
@@ -607,9 +745,13 @@ static bool append_infix_block_operands(
   }
 
   for (long position = 0; position < count;) {
-    uint32_t operand = EXPR_NONE;
-    if (!translate_sequence_item(translator, directive, &position, &operand)) return false;
-    if (!append_infix_operand(call, operand)) return false;
+    ConfettiExpressions operands = { .first = EXPR_NONE, .last = EXPR_NONE };
+    if (!translate_sequence_item(translator, directive, &position, &operands)) return false;
+    for (uint32_t operand = operands.first; operand != EXPR_NONE;) {
+      uint32_t next = translator->interpreter->storage.expressions[operand].next;
+      if (!append_infix_operand(call, operand)) return false;
+      operand = next;
+    }
   }
   return true;
 }
@@ -648,10 +790,10 @@ static bool translate_infix_argument_span(
   if (include_block) {
     long block_count = conf_get_directive_count(directive);
     for (long position = 0; position < block_count;) {
-      uint32_t argument = EXPR_NONE;
-      if (!translate_sequence_item(translator, directive, &position, &argument))
+      ConfettiExpressions arguments = { .first = EXPR_NONE, .last = EXPR_NONE };
+      if (!translate_sequence_item(translator, directive, &position, &arguments))
         return false;
-      append_child(translator->interpreter, *index, &previous_child, argument);
+      append_confetti_children(translator->interpreter, *index, &previous_child, arguments);
     }
   }
 
@@ -1011,8 +1153,16 @@ static bool translate_single_block(
     return false;
   }
   long position = 0;
-  if (!translate_sequence_item(translator, directive, &position, index)) return false;
-  if (position == count) return true;
+  ConfettiExpressions expressions = { .first = EXPR_NONE, .last = EXPR_NONE };
+  if (!translate_sequence_item(translator, directive, &position, &expressions)) return false;
+  if (
+    position == count &&
+    expressions.first != EXPR_NONE &&
+    expressions.first == expressions.last
+  ) {
+    *index = expressions.first;
+    return true;
+  }
 
   snprintf(
     *translator->error,
@@ -1036,9 +1186,9 @@ static bool translate_sequence_block(
 
   long count = conf_get_directive_count(directive);
   for (long i = 0; i < count;) {
-    uint32_t child = EXPR_NONE;
-    if (!translate_sequence_item(translator, directive, &i, &child)) return false;
-    append_child(translator->interpreter, *index, &previous, child);
+    ConfettiExpressions children = { .first = EXPR_NONE, .last = EXPR_NONE };
+    if (!translate_sequence_item(translator, directive, &i, &children)) return false;
+    append_confetti_children(translator->interpreter, *index, &previous, children);
   }
   return true;
 }
@@ -1515,7 +1665,7 @@ static bool translate_fn_definition(
   return true;
 }
 
-static bool translate_sequence_item(
+static bool translate_sequence_item_one(
   ConfettiTranslator *translator,
   const conf_directive *container,
   long *position,
@@ -1779,13 +1929,353 @@ static bool translate_directive(
       // per logical subdirective. `do` explicitly groups a sequence into one.
       long block_count = conf_get_directive_count(directive);
       for (long position = 0; position < block_count;) {
-        uint32_t argument = EXPR_NONE;
-        if (!translate_sequence_item(translator, directive, &position, &argument)) return false;
-        append_child(translator->interpreter, *index, &previous, argument);
+        ConfettiExpressions arguments = { .first = EXPR_NONE, .last = EXPR_NONE };
+        if (!translate_sequence_item(translator, directive, &position, &arguments)) return false;
+        append_confetti_children(translator->interpreter, *index, &previous, arguments);
       }
     }
   }
 
+  return true;
+}
+
+// The sequence translator is the only place that recognizes parse-time
+// includes. Other directive translations still produce exactly one expression.
+static bool translate_sequence_item(
+  ConfettiTranslator *translator,
+  const conf_directive *container,
+  long *position,
+  ConfettiExpressions *result
+) {
+  *result = (ConfettiExpressions) { .first = EXPR_NONE, .last = EXPR_NONE };
+  const conf_directive *directive = conf_get_directive(container, *position);
+  const conf_argument *first = conf_get_argument(directive, 0);
+  size_t offset = directive_offset(directive);
+
+  if (is_bare_argument(translator, first, "include") && translator->includes != NULL) {
+    ++*position;
+    return translate_confetti_include(translator, directive, result);
+  }
+
+  uint32_t expression = EXPR_NONE;
+  if (!translate_sequence_item_one(translator, container, position, &expression)) {
+    confetti_record_failure(translator, offset);
+    return false;
+  }
+  *result = (ConfettiExpressions) { .first = expression, .last = expression };
+  return true;
+}
+
+// Preserve the containing file’s path spelling. Resolve relative include names
+// against the directory up to and including its last `/`, or against cwd for
+// stdin and paths without a directory component.
+static char* confetti_include_path(const ConfettiTranslator *translator, const char *name) {
+  size_t name_length = strlen(name);
+  size_t directory_length = 0;
+  if (name[0] != '/' && translator->path != NULL) {
+    const char *separator = strrchr(translator->path, '/');
+    if (separator != NULL)
+      directory_length = (size_t)(separator - translator->path) + 1;
+  }
+  if (name_length == SIZE_MAX || directory_length > SIZE_MAX - name_length - 1) return NULL;
+  char *path = malloc(directory_length + name_length + 1);
+  if (path == NULL) return NULL;
+  if (directory_length != 0) memcpy(path, translator->path, directory_length);
+  memcpy(path + directory_length, name, name_length + 1); // Include the terminating NUL.
+  return path;
+}
+
+// Append the direct include site while unwinding a failed parse. Unlike
+// evaluation include traces this works with source mapping disabled.
+static void append_confetti_include_trace(
+  ConfettiTranslator *translator,
+  ExpressionSourceLocation site
+) {
+  ParseDiagnostic *diagnostic = translator->diagnostic;
+  if (diagnostic == NULL || diagnostic->include_trace_truncated) return;
+  size_t used = strlen(diagnostic->include_trace);
+  int written = snprintf(
+    diagnostic->include_trace + used,
+    sizeof(diagnostic->include_trace) - used,
+    "Included from %s:%" PRIu32 ":%" PRIu32 "\n",
+    translator->path != NULL ? translator->path : "/dev/stdin",
+    site.line,
+    site.column
+  );
+  if (written < 0 || (size_t)written >= sizeof(diagnostic->include_trace) - used) {
+    diagnostic->include_trace[used] = '\0';
+    diagnostic->include_trace_truncated = true;
+  }
+}
+
+static bool translate_confetti_include(
+  ConfettiTranslator *translator,
+  const conf_directive *directive,
+  ConfettiExpressions *result
+) {
+  size_t offset = directive_offset(directive);
+  ExpressionSourceLocation site = confetti_source_location(translator, offset);
+  const conf_argument *name = conf_get_argument(directive, 1);
+  if (
+    conf_get_argument_count(directive) != 2 ||
+    has_directive_block(translator, directive) ||
+    name == NULL || name->value == NULL || name->is_expression ||
+    name->lexeme_offset >= translator->source_length ||
+    translator->source[name->lexeme_offset] != '"' ||
+    name->value[0] == '\0'
+  ) {
+    snprintf(
+      *translator->error,
+      ERR_MSG_SIZE,
+      "`include` expects one literal string path and no block"
+    );
+    confetti_record_failure(translator, offset);
+    return false;
+  }
+
+  // Use the same literal-string escape rules as normal Confetti strings.
+  // A filesystem path cannot contain embedded NUL bytes.
+  char decoded[EXPR_TEXT_SIZE] = {'\0'};
+  size_t decoded_length = 0;
+  if (!decode_confetti_string(
+    translator,
+    name->value,
+    strlen(name->value),
+    name->lexeme_offset,
+    &decoded,
+    &decoded_length
+  )) {
+    wipe_memory(decoded, sizeof(decoded));
+    confetti_record_failure(translator, name->lexeme_offset);
+    return false;
+  }
+  if (decoded_length == 0 || memchr(decoded, '\0', decoded_length) != NULL) {
+    snprintf(
+      *translator->error,
+      ERR_MSG_SIZE,
+      "`include` path must be a nonempty string without NUL bytes"
+    );
+    wipe_memory(decoded, sizeof(decoded));
+    confetti_record_failure(translator, name->lexeme_offset);
+    return false;
+  }
+  char *path = confetti_include_path(translator, decoded);
+  wipe_memory(decoded, sizeof(decoded));
+  if (path == NULL) {
+    snprintf(*translator->error, ERR_MSG_SIZE, "Unable to allocate include path");
+    confetti_record_failure(translator, offset);
+    return false;
+  }
+
+  char message[ERR_MSG_SIZE] = {'\0'};
+  FILE *file = fopen(path, "rb");
+  if (file == NULL) {
+    snprintf(message, sizeof(message), "Unable to open include “%s”", path);
+    goto fail;
+  }
+
+  struct stat info = {0};
+  if (fstat(fileno(file), &info) != 0) {
+    snprintf(message, sizeof(message), "Unable to inspect include “%s”", path);
+    goto close_fail;
+  }
+  for (
+    const ConfettiIncludeFrame *frame = translator->includes->active;
+    frame != NULL;
+    frame = frame->previous
+  ) {
+    if (frame->device == info.st_dev && frame->inode == info.st_ino) {
+      snprintf(message, sizeof(message), "Circular include: “%s”", path);
+      goto close_fail;
+    }
+  }
+
+  // Confetti's parser needs a NUL-terminated buffer. Reserve an extra byte;
+  // the source itself must be strictly shorter than SOURCE_CAPACITY.
+  char *source = malloc(SOURCE_CAPACITY + 1);
+  if (source == NULL) {
+    snprintf(message, sizeof(message), "Unable to allocate include source buffer");
+    goto close_fail;
+  }
+  size_t length = fread(source, 1, SOURCE_CAPACITY, file);
+  if (ferror(file)) {
+    snprintf(message, sizeof(message), "Unable to read include “%s”", path);
+    goto source_fail;
+  }
+  if (length >= SOURCE_CAPACITY) {
+    snprintf(message, sizeof(message), "Include exceeds Confetti source capacity: “%s”", path);
+    goto source_fail;
+  }
+  if (memchr(source, '\0', length) != NULL) {
+    snprintf(message, sizeof(message), "Include contains a NUL byte: “%s”", path);
+    goto source_fail;
+  }
+  source[length] = '\0';
+  fclose(file);
+
+  bool retain = translator->interpreter->storage.expression_source_locations != NULL;
+  uint32_t source_id = 0;
+  if (retain) {
+    if (
+      translator->includes->registry == NULL ||
+      !register_owned_source_file(translator->includes->registry, path, source, length, &source_id)
+    ) {
+      snprintf(message, sizeof(message), "Unable to register include source “%s”", path);
+      goto buffer_fail;
+    }
+    // This source occurrence now belongs to the registry, including failures.
+    if (!set_source_include_location(translator->includes->registry, source_id, site)) {
+      snprintf(*translator->error, ERR_MSG_SIZE, "Unable to record include source location");
+      confetti_record_failure(translator, offset);
+      return false;
+    }
+  }
+
+  ConfettiIncludeFrame frame = {
+    .device = info.st_dev,
+    .inode = info.st_ino,
+    .previous = translator->includes->active,
+  };
+  ConfettiIncludeContext includes = {
+    .registry = translator->includes->registry,
+    .active = &frame,
+  };
+  ConfettiTranslator included = {
+    .interpreter = translator->interpreter,
+    .source = source,
+    .source_length = length,
+    .path = path,
+    .source_id = source_id,
+    .includes = &includes,
+    .diagnostic = translator->diagnostic,
+    .error = translator->error,
+    .location_scan_line = 1,
+    .location_scan_column = 1,
+  };
+  bool success = translate_confetti_unit(&included, result);
+  if (!success) append_confetti_include_trace(translator, site);
+
+  if (!retain) {
+    wipe_memory(source, length + 1);
+    free(source);
+    wipe_memory(path, strlen(path) + 1);
+    free(path);
+  }
+  return success;
+
+  source_fail:
+    wipe_memory(source, length);
+    free(source);
+    goto close_fail;
+
+  close_fail:
+    fclose(file);
+    goto fail;
+
+  buffer_fail:
+    wipe_memory(source, length + 1);
+    free(source);
+    goto fail;
+
+  fail:
+    snprintf(*translator->error, ERR_MSG_SIZE, "%s", message);
+    confetti_record_failure(translator, offset);
+    wipe_memory(path, strlen(path) + 1);
+    free(path);
+    return false;
+}
+
+// Parse one Confetti source and append its translated expressions to the
+// same shared Lispico tables. Only the outer public entry point cleans them.
+static bool translate_confetti_unit(
+  ConfettiTranslator *translator,
+  ConfettiExpressions *result
+) {
+  *result = (ConfettiExpressions) { .first = EXPR_NONE, .last = EXPR_NONE };
+  conf_error error = {0};
+  conf_unit *unit = conf_parse(translator->source, NULL, &error);
+  if (unit == NULL) {
+    snprintf(
+      *translator->error,
+      ERR_MSG_SIZE,
+      "Confetti parse error at byte %zu: %s",
+      error.where,
+      error.description
+    );
+    confetti_record_failure(translator, error.where);
+    return false;
+  }
+
+  const conf_directive *root = conf_get_root(unit);
+  long count = conf_get_directive_count(root);
+  for (long i = 0; i < count;) {
+    ConfettiExpressions member = { .first = EXPR_NONE, .last = EXPR_NONE };
+    if (!translate_sequence_item(translator, root, &i, &member)) {
+      conf_free(unit);
+      return false;
+    }
+    append_confetti_expressions(translator->interpreter, result, member);
+  }
+  conf_free(unit);
+  return true;
+}
+
+static bool parse_confetti_source_impl(
+  Interpreter *interpreter,
+  const char *source,
+  size_t length,
+  const char *source_path,
+  SourceRegistry *registry,
+  char (*error)[ERR_MSG_SIZE],
+  ParseDiagnostic *diagnostic,
+  bool with_includes
+) {
+  if (error == NULL) return false;
+  (*error)[0] = '\0';
+  if (diagnostic != NULL) *diagnostic = (ParseDiagnostic) {0};
+  if (interpreter == NULL || !interpreter->configured || source == NULL) {
+    snprintf(*error, ERR_MSG_SIZE, "Interpreter or source is not initialized");
+    return false;
+  }
+  clean_expressions(interpreter);
+  if (memchr(source, '\0', length) != NULL) {
+    snprintf(*error, ERR_MSG_SIZE, "Source contains a NUL byte");
+    return false;
+  }
+  if (
+    with_includes &&
+    interpreter->storage.expression_source_locations != NULL &&
+    get_source_file(registry, 0) == NULL
+  ) {
+    snprintf(*error, ERR_MSG_SIZE, "Main source is not registered for source mapping");
+    return false;
+  }
+
+  const char *path = source_path;
+  if (path != NULL && strcmp(path, "/dev/stdin") == 0) path = NULL;
+  ConfettiIncludeFrame root_frame = {0};
+  ConfettiIncludeContext includes = { .registry = registry };
+  struct stat info = {0};
+  if (with_includes && source_path != NULL && stat(source_path, &info) == 0) {
+    root_frame = (ConfettiIncludeFrame) { .device = info.st_dev, .inode = info.st_ino };
+    includes.active = &root_frame;
+  }
+  ConfettiTranslator translator = {
+    .interpreter = interpreter,
+    .source = source,
+    .source_length = length,
+    .path = path,
+    .includes = with_includes ? &includes : NULL,
+    .diagnostic = diagnostic,
+    .error = error,
+    .location_scan_line = 1,
+    .location_scan_column = 1,
+  };
+  ConfettiExpressions expressions = { .first = EXPR_NONE, .last = EXPR_NONE };
+  if (!translate_confetti_unit(&translator, &expressions)) {
+    clean_expressions(interpreter);
+    return false;
+  }
   return true;
 }
 
@@ -1795,59 +2285,55 @@ bool parse_confetti_source(
   size_t length,
   char (*error)[ERR_MSG_SIZE]
 ) {
-  if (error == NULL) return false;
-  (*error)[0] = '\0';
-  if (interpreter == NULL || !interpreter->configured || source == NULL) {
-    snprintf(*error, ERR_MSG_SIZE, "Interpreter or source is not initialized");
-    return false;
-  }
+  return parse_confetti_source_impl(
+    interpreter,
+    source,
+    length,
+    NULL,
+    NULL,
+    error,
+    NULL,
+    false
+  );
+}
 
-  clean_expressions(interpreter);
-  if (memchr(source, '\0', length) != NULL) {
-    snprintf(*error, ERR_MSG_SIZE, "Source contains a NUL byte");
-    return false;
-  }
+bool parse_confetti_source_with_includes(
+  Interpreter *interpreter,
+  const char *source,
+  size_t length,
+  const char *source_path,
+  SourceRegistry *registry,
+  char (*error)[ERR_MSG_SIZE]
+) {
+  return parse_confetti_source_impl(
+    interpreter,
+    source,
+    length,
+    source_path,
+    registry,
+    error,
+    NULL,
+    true
+  );
+}
 
-  // Use only Confetti’s native directive and subdirective AST. In particular,
-  // do not enable Annex B’s opaque parenthesized-expression arguments.
-  conf_error parse_error = {0};
-  conf_unit *unit = conf_parse(source, NULL, &parse_error);
-  if (unit == NULL) {
-    snprintf(
-      *error,
-      ERR_MSG_SIZE,
-      "Confetti parse error at byte %zu: %s",
-      parse_error.where,
-      parse_error.description
-    );
-    return false;
-  }
-
-  ConfettiTranslator translator = {
-    .interpreter = interpreter,
-    .source = source,
-    .source_length = length,
-    .error = error,
-    .location_scan_offset = 0,
-    .location_scan_line = 1,
-    .location_scan_column = 1,
-  };
-
-  const conf_directive *root = conf_get_root(unit);
-  long count = conf_get_directive_count(root);
-  uint32_t previous = EXPR_NONE;
-  for (long i = 0; i < count;) {
-    uint32_t expression = EXPR_NONE;
-    if (!translate_sequence_item(&translator, root, &i, &expression)) goto fail;
-    if (previous != EXPR_NONE) interpreter->storage.expressions[previous].next = expression;
-    previous = expression;
-  }
-
-  conf_free(unit);
-  return true;
-
-  fail:
-    conf_free(unit);
-    clean_expressions(interpreter);
-    return false;
+bool parse_confetti_source_with_includes_diagnostic(
+  Interpreter *interpreter,
+  const char *source,
+  size_t length,
+  const char *source_path,
+  SourceRegistry *registry,
+  char (*error)[ERR_MSG_SIZE],
+  ParseDiagnostic *diagnostic
+) {
+  return parse_confetti_source_impl(
+    interpreter,
+    source,
+    length,
+    source_path,
+    registry,
+    error,
+    diagnostic,
+    true
+  );
 }

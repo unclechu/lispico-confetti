@@ -1,1 +1,3 @@
-Parse error: Unknown Lispico string escape “\x” in argument starting at byte 8
+[FAIL] Parsing failed: examples/fail/string-block-unknown-escape.confetti:1:9: Unknown Lispico string escape “\x” in argument starting at byte 8
+1 | assert {"hello\\x" == "hello"} # Invalid escape inside a native block
+  |         ↑

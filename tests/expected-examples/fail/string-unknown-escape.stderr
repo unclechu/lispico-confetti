@@ -1,1 +1,3 @@
-Parse error: Unknown Lispico string escape “\q” in argument starting at byte 10
+[FAIL] Parsing failed: examples/fail/string-unknown-escape.confetti:1:11: Unknown Lispico string escape “\q” in argument starting at byte 10
+1 | var "bad" "\\q" # Unknown Lispico escape after Confetti decoding
+  |           ↑

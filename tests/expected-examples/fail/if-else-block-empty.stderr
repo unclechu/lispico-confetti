@@ -1,1 +1,3 @@
-Parse error: Empty expression block; use `do {}`
+[FAIL] Parsing failed: examples/fail/if-else-block-empty.confetti:1:1: Empty expression block; use `do {}`
+1 | if 0 {
+  | ↑

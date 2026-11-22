@@ -1,1 +1,3 @@
-Parse error: Mixed or unsupported infix operators; use nested { … } groups
+[FAIL] Parsing failed: examples/fail/logical-arithmetic-mixed.confetti:1:12: Mixed or unsupported infix operators; use nested { … } groups
+1 | var "bad" {1 + 2 && 3}
+  |            ↑

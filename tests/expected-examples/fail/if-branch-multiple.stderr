@@ -1,1 +1,3 @@
-Parse error: Block contains multiple expressions; use `do { … }` for a single sequence
+[FAIL] Parsing failed: examples/fail/if-branch-multiple.confetti:1:1: Block contains multiple expressions; use `do { … }` for a single sequence
+1 | if 1 {
+  | ↑

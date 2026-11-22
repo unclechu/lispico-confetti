@@ -1,1 +1,3 @@
-Parse error: `id` expects one argument or one expression block
+[FAIL] Parsing failed: examples/fail/id-empty.confetti:1:12: `id` expects one argument or one expression block
+1 | var "bad" {id} # Missing operand for the `id` form
+  |            ↑

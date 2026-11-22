@@ -1,1 +1,3 @@
-Parse error: Indexed access requires a { … } index block
+[FAIL] Parsing failed: examples/fail/indexed-missing-block-as-argument.confetti:1:9: Indexed access requires a { … } index block
+1 | println foo[]
+  |         ↑

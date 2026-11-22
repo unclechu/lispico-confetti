@@ -1,1 +1,4 @@
-Parse error: Infix operator is missing an operand
+[FAIL] Parsing failed: examples/fail/infix-block-empty.confetti:2:12: Infix operator is missing an operand
+1 | # Even a chainable infix operator requires a right-hand operand.
+2 | var "bad" {1 + {}}
+  |            ↑

@@ -69,12 +69,56 @@ See for details: https://github.com/unclechu/lispico#command-line-interface
 lispico-confetti --help
 ```
 
-### Evaluation failure locations
+### Parse-time includes and source-aware diagnostics
 
-Lispico Confetti populates Lispico’s optional expression source-map table
-with offsets into the original Confetti source. Source mapping is enabled by
-default. Evaluation errors report the source line and byte column, followed
-by the failing line, up to three preceding lines, and an upward arrow.
+`include "PATH"` inserts expressions from another Confetti source file during
+parsing and translation, **before evaluation**. Paths must be literal quoted
+strings. Relative paths resolve against the directory containing the source
+with the include directive; for stdin, they resolve against the current working
+directory. Absolute paths work as written.
+
+For example, with `lib/setup.confetti`:
+
+```confetti
+var "threshold" 10
+fn "ready" args value {value >= threshold}
+```
+
+The main program can simply use:
+
+```confetti
+include "lib/setup.confetti"
+assert {ready 12}
+```
+
+Includes work within `do { … }`, function bodies, and native Confetti
+argument blocks. An include expands to **zero or more sibling expressions**:
+there is no wrapper call or newly introduced scope. This is equivalent to
+copy-pasting the included file’s directives at that position, except that the
+included source retains its original file locations. A block that specifically
+requires a single expression still requires exactly one expression after
+expansion. Included files must themselves contain complete valid Confetti
+syntax, rather than incomplete fragments of a parent directive.
+
+Repeated inclusion reparses the file on each occurrence. Circular inclusions
+are rejected by filesystem identity (device and inode), including symlink and
+hard-link aliases. Included paths are not normalized. There is no automatic
+include-once behavior or namespace isolation. The file extension is not
+restricted, but **all included files are parsed as Confetti**, not as Lispico
+S-expressions; a future `include-lisp` would be a separate feature.
+
+Source mapping is enabled by default. Evaluation failures identify the exact
+source file, line, and byte column, display that file’s excerpt, and print the
+chain of `Included from` sites back to the main source. Confetti syntax errors,
+translation errors, and include-loading or cycle errors also report a filename,
+line, byte column, source excerpt, and include trace. For example:
+
+```text
+[FAIL] Evaluation failed: lib/logic.confetti:2:4: Undefined variable
+2 | id missing
+  |    ↑
+Included from main.confetti:1:1
+```
 
 ```sh
 lispico-confetti --source-highlight=none program.confetti
@@ -82,17 +126,22 @@ lispico-confetti --source-context-before=5 program.confetti
 lispico-confetti --no-source-map program.confetti
 ```
 
-`--no-source-map` skips source-location storage and prints the expression index
-instead. The `--source-highlight` modes `bat`, `none`, and `sh`, their CLI and
-environment settings, and the custom shell renderer behave like Lispico’s
-corresponding options. `bat` is attempted by default and silently falls back
-to the plain renderer when unavailable. The `sh` mode receives the original
-Confetti source on stdin and the `LISPICO_SOURCE_CONTEXT_*` environment
-variables, and controls the whole excerpt.
+`--no-source-map` skips retained source-location storage and evaluation
+excerpts/traces, but **does not disable includes**. Parsing failures still
+report their filename and include trace (without an excerpt). The standard
+Lispico `--source-highlight` modes `bat`, `none`, and `sh` remain available;
+`bat` falls back to the plain renderer when unavailable, and the `sh` mode
+receives the original *failing source file* through stdin and the usual
+`LISPICO_SOURCE_CONTEXT_*` environment variables. Confetti uses the `confetti`
+file type for source highlighting.
 
-The existing example runners explicitly select `--source-highlight=none` to
-keep expected stderr deterministic, including when `bat` is installed. The
-expected-error fixtures themselves are not changed by this update.
+The original in-memory `parse_confetti_source()` API remains available without
+filesystem inclusion; the file-aware `parse_confetti_source_with_includes()` and
+`parse_confetti_source_with_includes_diagnostic()` entry points support includes
+and optional structured parsing diagnostics. When mapping is enabled, the host
+registers the main source as source ID 0 and keeps the source registry alive
+until after evaluation and error reporting. Include expansion and cycle
+detection do not depend on source mapping.
 
 ## Translation rules
 

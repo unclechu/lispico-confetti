@@ -1,1 +1,3 @@
-Parse error: Infix operator is missing an operand
+[FAIL] Parsing failed: examples/fail/logical-missing-operand.confetti:1:12: Infix operator is missing an operand
+1 | var "bad" {1 &&}
+  |            ↑

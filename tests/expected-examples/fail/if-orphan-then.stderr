@@ -1,1 +1,3 @@
-Parse error: Unexpected `else` or `then` without `if`
+[FAIL] Parsing failed: examples/fail/if-orphan-then.confetti:1:1: Unexpected `else` or `then` without `if`
+1 | then { println "unexpected" }
+  | ↑

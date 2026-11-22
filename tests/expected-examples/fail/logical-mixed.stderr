@@ -1,1 +1,4 @@
-Parse error: Mixed or unsupported infix operators; use nested { … } groups
+[FAIL] Parsing failed: examples/fail/logical-mixed.confetti:2:12: Mixed or unsupported infix operators; use nested { … } groups
+1 | # Operators do not mix within one directive: explicitly group subexpressions.
+2 | var "bad" {1 && 0 || 1}
+  |            ↑

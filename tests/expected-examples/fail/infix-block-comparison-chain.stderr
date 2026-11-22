@@ -1,1 +1,4 @@
-Parse error: Operator “==” cannot be chained; use nested { … } groups
+[FAIL] Parsing failed: examples/fail/infix-block-comparison-chain.confetti:2:9: Operator “==” cannot be chained; use nested { … } groups
+1 | # Comparisons still accept exactly two operands after expansion.
+2 | assert {1 == {id 1; id 1}}
+  |         ↑

@@ -1,1 +1,4 @@
-Parse error: Block contains multiple expressions; use `do { … }` for a single sequence
+[FAIL] Parsing failed: examples/fail/id-block-multiple.confetti:2:12: Block contains multiple expressions; use `do { … }` for a single sequence
+1 | # The `id` special form still requires exactly one expression in its block.
+2 | var "bad" {id {id 1; id 2}}
+  |            ↑

@@ -16,6 +16,7 @@
 #include "lispico/src/symbol-print.h"
 #include "lispico/src/parse-cli-args.h"
 #include "lispico/src/source-highlight.h"
+#include "lispico/src/source-registry.h"
 #include "src/confetti-translate.h"
 
 #define DEFAULT_EXECUTABLE_NAME "lispico-confetti"
@@ -190,6 +191,7 @@ int main(int argc, char **argv) {
   }
 
   int exit_code = 0;
+  SourceRegistry source_registry = { .dynamic = true };
 
   Array argv_array = {
     .element_type = TYPE_STRING,
@@ -241,8 +243,66 @@ int main(int argc, char **argv) {
   }
   source[source_length] = '\0';
 
-  if (!parse_confetti_source(&interpreter, source, source_length, &parse_error)) {
-    fprintf(stderr, "Parse error: %s\n", parse_error);
+  // The entry file is source ID 0. Included source buffers are owned by the
+  // registry only when mapping is enabled; expansion itself needs no map.
+  if (cli.with_source_map) {
+    uint32_t source_id = 0;
+    if (!register_source_file(
+      &source_registry,
+      cli.source_file,
+      source,
+      source_length,
+      &source_id
+    )) {
+      fprintf(stderr, "[FAIL] Unable to register main source file\n");
+      exit_code = 1;
+      goto done;
+    }
+  }
+
+  ParseDiagnostic diagnostic = {0};
+  if (!parse_confetti_source_with_includes_diagnostic(
+    &interpreter,
+    source,
+    source_length,
+    cli.source_file,
+    cli.with_source_map ? &source_registry : NULL,
+    &parse_error,
+    &diagnostic
+  )) {
+    if (diagnostic.has_location) {
+      fprintf(
+        stderr,
+        "[FAIL] Parsing failed: %s:%" PRIu32 ":%" PRIu32 ": %s\n",
+        diagnostic.path,
+        diagnostic.location.line,
+        diagnostic.location.column,
+        parse_error
+      );
+      if (cli.with_source_map) {
+        const SourceFile *file = get_source_file(
+          &source_registry,
+          diagnostic.location.source_id
+        );
+        if (file != NULL) {
+          print_source_highlight(
+            stderr,
+            file->source,
+            file->length,
+            &diagnostic.location,
+            cli.source_context_before,
+            "confetti",
+            source_highlight,
+            source_highlight_sh
+          );
+        }
+      }
+      fputs(diagnostic.include_trace, stderr);
+      if (diagnostic.include_trace_truncated)
+        fputs("Additional include sites omitted (trace too long)\n", stderr);
+    } else {
+      fprintf(stderr, "[FAIL] Parsing failed: %s\n", parse_error);
+    }
     exit_code = 1;
     goto done;
   }
@@ -295,24 +355,30 @@ int main(int argc, char **argv) {
       if (outcome.failure_expression_index != EXPR_NONE) {
         const ExpressionSourceLocation *location =
           get_expression_source_location(&interpreter, outcome.failure_expression_index);
-        if (location != NULL) {
+        const SourceFile *file =
+          location != NULL
+            ? get_source_file(&source_registry, location->source_id)
+            : NULL;
+        if (file != NULL) {
           fprintf(
             stderr,
-            "[FAIL] Evaluation failed: Line %" PRIu32 " Column %" PRIu32 ": %s\n",
+            "[FAIL] Evaluation failed: %s:%" PRIu32 ":%" PRIu32 ": %s\n",
+            file->path,
             location->line,
             location->column,
             outcome.as.fail_msg
           );
           print_source_highlight(
             stderr,
-            source,
-            source_length,
+            file->source,
+            file->length,
             location,
             cli.source_context_before,
             "confetti",
             source_highlight,
             source_highlight_sh
           );
+          print_source_include_trace(stderr, &source_registry, location->source_id);
         } else {
           fprintf(
             stderr,
@@ -342,6 +408,7 @@ int main(int argc, char **argv) {
     clean_evaluation(&interpreter);
     clean_symbols(&interpreter);
     clean_expressions(&interpreter);
+    clean_source_registry(&source_registry);
     free(argv_array.data);
     free(args_array.data);
     clean_cli_args(&cli);

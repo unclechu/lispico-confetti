@@ -1,1 +1,4 @@
-Parse error: Assignment is missing a value
+[FAIL] Parsing failed: examples/fail/assignment-missing-value.confetti:2:1: Assignment is missing a value
+1 | var "i" 0
+2 | i =
+  | ↑
