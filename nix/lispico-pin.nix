@@ -1,6 +1,6 @@
 let
-  commit = "3be155a608e063ab701f3bf015971d3ed58b3455";
-  hash = "sha256:0d0427gz0xhyajvxwg0bws3pyql007dxl3nrlzbbkcvzikrvyq1d";
+  commit = "6dc330ecebed838c2b2f97e75f6a4c62e70feb66";
+  hash = "sha256:0c8v3apgib7ksrkkwac1d1mxkffijvr4bj1kypwdf0zlnzh24hhr";
 in
 builtins.fetchTarball {
   url = "https://github.com/unclechu/lispico/archive/${commit}.tar.gz";
