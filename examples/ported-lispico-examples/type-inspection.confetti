@@ -30,3 +30,29 @@ assert { kind-of "or" == empty-kind }
 # Labels
 label "my-label"
 assert { kind-of "my-label" == label-kind }
+
+# User-defined functions use public names for introspection.
+fn "named-function" 42
+assert { kind-of "named-function" == label-kind }
+assert { kind-of "_FN_named-function" == label-kind }
+assert { id { named-function } == 42 }
+
+# Functions take precedence over globals with the same name for introspection.
+fn "println" 7
+assert { kind-of "println" == label-kind }
+assert { id { println } == 7 }
+
+# A local symbol masks the function for introspection, not for invocation.
+do {
+  local "named-function" 12
+  assert { kind-of "named-function" == var-kind }
+  assert { get "named-function" == 12 }
+  assert { id { named-function } == 42 }
+}
+assert { kind-of "named-function" == label-kind }
+
+# Ordinary variable lookup remains distinct from function-name introspection.
+var "named-function" 24
+assert { get "named-function" == 24 }
+assert { kind-of "named-function" == label-kind }
+assert { id { named-function } == 42 }

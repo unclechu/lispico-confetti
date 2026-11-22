@@ -1,0 +1,30 @@
+# Functions are publicly named without their internal `_FN_` label prefix.
+fn "answer" 42
+assert { is-frozen "answer" == false }
+freeze "answer"
+assert { is-frozen "answer" }
+assert { is-frozen "_FN_answer" }
+freeze "answer" # Idempotent.
+assert { id { answer } == 42 }
+assert { call "answer" == 42 }
+
+# Freezing a shadowing function freezes the callable function, not the native.
+fn "println" 7
+freeze "println"
+assert { is-frozen "_FN_println" }
+assert { id { println } == 7 }
+
+# Local symbols still take precedence for name-based introspection.
+fn "local-name" 11
+do {
+  local "local-name" 3
+  freeze "local-name"
+  assert { is-frozen "local-name" }
+  assert { id { local-name } == 11 }
+}
+assert { is-frozen "local-name" == false }
+
+# Explicitly naming the generated label also works.
+freeze "_FN_local-name"
+assert { is-frozen "local-name" }
+assert { id { local-name } == 11 }
