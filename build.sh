@@ -4,19 +4,23 @@ set -o errexit || exit; set -o errtrace; set -o nounset; set -o pipefail
 : "${MAIN_SOURCE_FILE:=interpreter.c}"
 : "${OUTPUT_EXECUTABLE_NAME:=lispico-confetti}"
 
+: "${DO_NOT_ADD_SOURCES:=0}"
+
 : "${CC:=cc}"
 : "${CFLAGS:=}"
 : "${LIBS:=-lm}"
 
 shopt -s nullglob
 
-SOURCES=(
-  src/*.c
-  lispico/src/*.c
-  confetti/confetti.c
-  generated/confetti_unidata.c
-  "${MAIN_SOURCE_FILE}"
-)
+SOURCES=("$MAIN_SOURCE_FILE")
+if (( DO_NOT_ADD_SOURCES == 0 )); then
+  SOURCES+=(
+    src/*.c
+    lispico/src/*.c
+    confetti/confetti.c
+    generated/confetti_unidata.c
+  )
+fi
 SOURCE_FILES=()
 for source in "${SOURCES[@]}"; do
   if [[ ${source##*/} != parse.c ]]; then
