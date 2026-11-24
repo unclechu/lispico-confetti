@@ -69,6 +69,45 @@ See for details: https://github.com/unclechu/lispico#command-line-interface
 lispico-confetti --help
 ```
 
+### Immutable command-line references
+
+The interpreter uses the same **immutable-reference** behavior as Lispico.
+An immutable reference means a **read-only view**, not a permanently frozen
+underlying allocation. The command-line values are held by the host for the
+whole evaluation; Lispico Confetti borrows them instead of making redundant
+runtime-managed copies:
+
+- `--var NAME s:VALUE` supplies an immutable string reference. Numeric CLI
+  variables remain ordinary numeric values.
+- `--arr` and `--arr-new` supply immutable array references. String-array
+  elements are immutable string references too, including empty elements.
+- Built-in `argv` and `args` are immutable array references; each contained
+  argument is also an immutable string reference. They keep their original
+  argument bytes rather than copying them into the evaluator.
+- The `--arr-set` option still initializes a CLI array *before evaluation*.
+  Scripts cannot modify these borrowed arrays or strings in place; use
+  `(copy)` to obtain independent writable storage.
+- `--freeze NAME` still freezes the **symbol binding**, independently of the
+  value’s immutable-reference flag. Without `--freeze`, an immutable-reference
+  variable may be rebound using `(override)`.
+
+In Confetti syntax, these checks can be written as:
+
+```confetti
+assert { is-immutable-ref argv }
+assert { is-immutable-ref args }
+assert { is-immutable-ref { arr-get argv 0 } }
+assert { has-immutable-refs argv }
+var "writable-argv" { copy argv }
+assert { is-immutable-ref writable-argv == false }
+```
+
+Named function arguments, `(immutable-ref)`, `(copy)`, and zero-copy slices use
+Lispico’s existing runtime semantics after translation; no special Confetti
+syntax is required. Both the CLI buffers and their descriptor arrays must
+remain alive until evaluation has finished and the interpreter has been
+cleaned. This does not change Confetti’s parse-time argument handling.
+
 ### Parse-time includes and source-aware diagnostics
 
 `include "PATH"` inserts expressions from another Confetti source file during

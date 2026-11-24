@@ -348,7 +348,7 @@ static bool translate_bare_atom(
   size_t byte_offset,
   uint32_t *index
 ) {
-  String atom = { .data = text, .length = length };
+  String atom = { .data = text, .base = text, .length = length, .nul_terminated = true };
 
   // Parse a numeric literal.
   if (is_number_start(atom)) {
@@ -1068,7 +1068,12 @@ static bool has_named_call_operand(
     is_operator(argument->value)
   ) return false;
 
-  String atom = { .data = argument->value, .length = strlen(argument->value) };
+  String atom = {
+    .data = argument->value,
+    .base = argument->value,
+    .length = strlen(argument->value),
+    .nul_terminated = true,
+  };
   return !is_number_start(atom);
 }
 

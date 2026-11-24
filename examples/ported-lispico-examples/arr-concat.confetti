@@ -6,10 +6,10 @@ assert { arr-type { arr-concat { arr 1 2; arr 3 4 } } == u32 }
 # The same source can be concatenated repeatedly
 var "foo" { arr 1 2 3 }
 assert { arr-concat foo foo == arr 1 2 3 1 2 3 }
-var "copy" { arr-concat foo foo }
+var "independent-copy" { arr-concat foo foo }
 arr-set "foo" 0 99
-assert { copy == arr 1 2 3 1 2 3 }
-arr-set "copy" 1 77
+assert { independent-copy == arr 1 2 3 1 2 3 }
+arr-set "independent-copy" 1 77
 assert { foo == arr 99 2 3 }
 
 # Signed and floating-point arrays preserve their element types

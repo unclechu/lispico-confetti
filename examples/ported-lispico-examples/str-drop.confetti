@@ -17,11 +17,15 @@ assert { str-char { str-drop "abc\\0def" 3; id 0 } == 0 }
 assert { str-drop { str "Hello" " world"; id 6 } == "world" }
 assert { str-drop { type s 12345; id 2 } == "345" }
 
-# Returned strings do not change with their source
+# Read-only suffixes see writes through the original variable.
 var "original" "Hello world"
 var "suffix" { str-drop original 6 }
-str-set "original" "Hi"
-assert { suffix == "world" }
+assert { is-immutable-ref suffix }
+str-set "original" 6 { str-char "W" }
+assert { suffix == "World" }
+str-resize "original" 5
+gc
+assert { suffix == "World" }
 
 # Empty string-array elements can be dropped by zero bytes
 arr-new "strings" s 1

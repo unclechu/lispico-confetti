@@ -20,8 +20,12 @@ assert { str-size buffer == 12 }
 assert { str-size short == 2 }
 assert { short == "Hi" }
 
-# Returned strings do not change with their source
+# Read-only prefixes see writes to the original storage.
 var "original" "Hello"
 var "prefix" { str-take original 3 }
-str-set "original" "World"
-assert { prefix == "Hel" }
+assert { is-immutable-ref prefix }
+str-set "original" 0 { str-char "Y" }
+assert { prefix == "Yel" }
+str-resize "original" 2
+gc
+assert { prefix == "Yel" }

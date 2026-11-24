@@ -7,6 +7,13 @@ gc
 assert { id { local-variables } == { variables } }
 gc
 assert { arr-type { variables } == s }
+assert { is-immutable-ref { variables } == false }
+assert { has-immutable-refs { variables } }
+assert { is-immutable-ref { arr-get { variables; id 0 } } }
+var "names-for-editing" { variables }
+arr-set "names-for-editing" 0 { copy { arr-get names-for-editing 0 } }
+assert { is-immutable-ref { arr-get names-for-editing 0 } == false }
+assert { has-immutable-refs names-for-editing }
 
 # Inspect the resulting arrays without copying them into named arguments.
 fn "has-name" { var-args; do {

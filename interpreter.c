@@ -4,7 +4,6 @@
 #include <string.h>
 
 #include "lispico/src/evaluate.h"
-#include "lispico/src/evaluate-copy.h"
 #include "lispico/src/expression.h"
 #include "lispico/src/read-file.h"
 #include "lispico/src/storage.h"
@@ -66,24 +65,21 @@ static void eval_settings_cb(EvalSettingsInterface *interface) {
 
     if (definition->kind == SYM_VARIABLE) {
       Value value = definition->as.value;
-      if (value.type == TYPE_STRING) {
-        String copied = {0};
-        if (!copy_runtime_string(interpreter, value.as.string, &copied)) {
-          interface->report_failure(interface, "Unable to allocate CLI string value");
-          return;
-        }
-        value.as.string = copied;
-      }
+      if (value.type == TYPE_STRING) value.as.string.immutable_ref = true;
       sym->kind = SYM_VARIABLE;
       sym->as.variable = value;
     } else if (definition->kind == SYM_ARRAY) {
-      Array copied = {0};
-      if (!copy_runtime_array(interpreter, definition->as.array, &copied)) {
-        interface->report_failure(interface, "Unable to allocate CLI array value");
-        return;
+      // CLI arrays and their strings remain owned by `CliOptions` throughout
+      // evaluation. Borrow the array and its string elements as read-only views.
+      Array view = definition->as.array;
+      view.immutable_ref = true;
+      if (view.element_type == TYPE_STRING && view.data != NULL) {
+        String *strings = view.data;
+        for (uint32_t j = 0; j < view.length; ++j)
+          strings[j].immutable_ref = true;
       }
       sym->kind = SYM_ARRAY;
-      sym->as.array = copied;
+      sym->as.array = view;
     } else {
       interface->report_failure(interface, "Unsupported CLI definition kind");
       return;
@@ -196,26 +192,44 @@ int main(int argc, char **argv) {
   Array argv_array = {
     .element_type = TYPE_STRING,
     .length = (uint32_t)argc,
-    .data = malloc(sizeof(String) * (size_t)argc),
+    .data = argc > 0 ? malloc(sizeof(String) * (size_t)argc) : NULL,
+    .base = NULL,
+    .immutable_ref = true,
   };
+  argv_array.base = argv_array.data;
   Array args_array = {
     .element_type = TYPE_STRING,
     .length = (uint32_t)(argc - cli.raw_args_start),
     .data = NULL,
+    .base = NULL,
+    .immutable_ref = true,
   };
 
   if (argc > 0 && argv_array.data == NULL) goto malloc_fail;
   for (int i = 0; i < argc; ++i) {
-    String arg = { .data = argv[i], .length = strlen(argv[i]) };
-    ((String*) argv_array.data)[i] = arg;
+    String arg = {
+      .data = argv[i],
+      .base = argv[i],
+      .length = strlen(argv[i]),
+      .immutable_ref = true,
+      .nul_terminated = true,
+    };
+    ((String *)argv_array.data)[i] = arg;
   }
 
   if (args_array.length > 0) {
     args_array.data = malloc(sizeof(String) * args_array.length);
+    args_array.base = args_array.data;
     if (args_array.data == NULL) goto malloc_fail;
     for (uint32_t i = 0; i < args_array.length; ++i) {
       const char *arg = argv[cli.raw_args_start + (int)i];
-      ((String*) args_array.data)[i] = (String) { .data = arg, .length = strlen(arg) };
+      ((String *)args_array.data)[i] = (String) {
+        .data = arg,
+        .base = arg,
+        .length = strlen(arg),
+        .immutable_ref = true,
+        .nul_terminated = true,
+      };
     }
   }
 
