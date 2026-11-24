@@ -1,0 +1,58 @@
+# Immutable references are read-only views, not immutable backing storage.
+var "source" "hello"
+var "view" { immutable-ref source }
+assert { is-immutable-ref view }
+assert { is-immutable-ref source == false }
+assert { has-immutable-refs view }
+assert { has-immutable-refs 42 == false }
+str-set "source" 0 { str-char "H" }
+assert { view == "Hello" }
+
+# Resizing allocates new storage, leaving the old viewed storage intact.
+str-resize "source" 3
+gc
+assert { view == "Hello" }
+
+var "numbers" { arr 1 2 3 }
+var "number-view" { immutable-ref numbers }
+arr-set "numbers" 0 9
+assert { arr-get number-view 0 == 9 }
+override "numbers" { arr 4 5 }
+gc
+assert { arr-get number-view 0 == 9 }
+
+# The array is writable, but the first string element is read-only.
+var "words" { arr { immutable-ref "first"; id "second" } }
+assert { is-immutable-ref words == false }
+assert { has-immutable-refs words }
+assert { is-immutable-ref { arr-get words 0 } }
+assert { is-immutable-ref { arr-get words 1 } == false }
+arr-set "words" 0 "changed"
+assert { has-immutable-refs words == false }
+
+# Function arguments retain immutable views instead of copying them.
+fn "read-view" args input do {
+  assert { is-immutable-ref input }
+  str-size input
+}
+assert { read-view { immutable-ref "testing" } == 7 }
+
+# A variable holding an immutable view can still be rebound.
+override "view" "new"
+assert { is-immutable-ref view == false }
+
+# A function can return an immutable view of runtime-owned local storage.
+# The view keeps the backing allocation reachable after the scope exits.
+fn "make-view" do {
+  local "temporary" "created"
+  immutable-ref temporary
+}
+var "escaped" { make-view }
+gc
+assert { escaped == "created" }
+
+# The immutable array view observes replacements through the mutable owner.
+var "sentences" { arr "first" "second" }
+var "sentence-view" { immutable-ref sentences }
+arr-set "sentences" 0 "replaced"
+assert { arr-get sentence-view 0 == "replaced" }

@@ -1,0 +1,40 @@
+# Immutable references share backing storage without copying their bytes.
+var "original" "Hello world"
+var "view" { str-slice original 6 5 }
+assert { is-immutable-ref view }
+str-set "original" 6 { str-char "W" }
+assert { view == "World" }
+
+# Explicit copies are independent and mutable, including string-array items.
+var "strings" { arr view { str-take "abcdef" 3 } }
+assert { is-immutable-ref strings == false }
+assert { has-immutable-refs strings }
+var "independent" { copy strings }
+assert { has-immutable-refs independent == false }
+arr-set "independent" 0 "changed"
+assert { arr-get strings 0 == "World" }
+
+# String-array (set) preserves immutable element references while replacing
+# the destination descriptors. Unused elements become empty strings.
+arr-new "destination" s 3
+set "destination" { arr { str-take "alpha" 2; str-drop "prefix:second" 7 } }
+assert { arr-size destination == 3 }
+assert { arr-get destination 0 == "al" }
+assert { arr-get destination 1 == "second" }
+assert { arr-get destination 2 == "" }
+assert { is-immutable-ref { arr-get destination 0 } }
+assert { is-immutable-ref { arr-get destination 1 } }
+
+# Concatenation of immutable elements allocates an array of descriptors, not
+# additional character buffers. The new array can still replace elements.
+var "combined" { arr-concat destination strings }
+assert { has-immutable-refs combined }
+arr-set "combined" 0 { copy { arr-get combined 0 } }
+assert { is-immutable-ref { arr-get combined 0 } == false }
+
+# GC must retain the old source while an immutable view remains reachable.
+str-resize "original" 2
+gc
+assert { view == "World" }
+assert { arr-get strings 0 == "World" }
+assert { arr-get independent 0 == "changed" }

@@ -1,0 +1,41 @@
+# `(copy)` always produces a mutable, independent string or array value.
+var "source" "hello"
+var "view" { immutable-ref source }
+var "independent" { copy view }
+assert { is-immutable-ref independent == false }
+str-set "source" 0 { str-char "H" }
+assert { view == "Hello" }
+assert { independent == "hello" }
+str-set "independent" 0 { str-char "w" }
+assert { independent == "wello" }
+
+# Byte lengths and embedded NUL bytes survive copying unchanged.
+var "binary" { copy { immutable-ref "a\\0b" } }
+assert { str-size binary == 3 }
+assert { binary == "a\\0b" }
+assert { copy "" == "" }
+
+# Strings inside a copied array are also writable independent copies.
+var "words" { arr { immutable-ref "first"; id "second" } }
+var "words-view" { immutable-ref words }
+var "words-copy" { copy words-view }
+assert { is-immutable-ref words-copy == false }
+assert { has-immutable-refs words-copy == false }
+arr-set "words" 0 "replaced"
+assert { arr-get words-copy 0 == "first" }
+arr-set "words-copy" 1 "changed"
+assert { arr-get words 1 == "second" }
+
+# Numeric arrays are copied too, including through immutable references.
+var "numbers" { immutable-ref { arr 1 2 3 } }
+var "numbers-copy" { copy numbers }
+assert { is-immutable-ref numbers-copy == false }
+arr-set "numbers-copy" 0 99
+assert { arr-get numbers 0 == 1 }
+assert { arr-get numbers-copy 0 == 99 }
+
+# A copied value remains reachable after its source is replaced and GC runs.
+override "view" "different"
+gc
+assert { independent == "wello" }
+assert { arr-get words-copy 0 == "first" }

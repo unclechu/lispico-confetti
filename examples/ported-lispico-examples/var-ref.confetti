@@ -1,0 +1,60 @@
+# Pass short name-based references instead of copying string/array values.
+fn "change-first-byte" args target { str-set target 0 { str-char "a" } }
+fn "change-first-element" args target { arr-set target 0 99 }
+fn "increment" args target { set target { get target + 1 } }
+
+var "text" "hello"
+assert { var-ref "text" == "text" }
+assert { is-immutable-ref { var-ref "text" } }
+assert { is-immutable-ref { copy { var-ref "text" } } == false }
+change-first-byte { var-ref "text" }
+assert { text == "aello" }
+
+var "items" { arr 1 2 3 }
+change-first-element { var-ref "items" }
+assert { items == arr 99 2 3 }
+
+# Locals are resolved to their actual stored names, even across function calls.
+do {
+  local "text" "WORLD"
+  local-str-new "buffer" 3
+  local-arr-new "numbers" u32 2
+  local "counter" 4
+  local "text-ref" { var-ref "text" }
+
+  assert { text-ref != "text" }
+  assert { get text-ref == text }
+  change-first-byte text-ref
+  assert { text == "aORLD" }
+  change-first-byte { var-ref "buffer" }
+  assert { str-get "buffer" 0 == str-char "a" }
+  change-first-element { var-ref "numbers" }
+  assert { arr-get "numbers" 0 == 99 }
+  increment { var-ref "counter" }
+  assert { counter == 5 }
+
+  # Nearest local wins; an outer reference continues to name the outer local.
+  do {
+    local "text" "xyz"
+    assert { var-ref "text" != text-ref }
+    change-first-byte { var-ref "text" }
+    assert { text == "ayz" }
+  }
+  assert { text == "aORLD" }
+}
+assert { text == "aello" }
+
+# A frozen variable or a TYPE_VOID variable can still be named.
+var "frozen-value" 8
+freeze "frozen-value"
+assert { var-ref "frozen-value" == "frozen-value" }
+var "resettable" 12
+reset "resettable"
+assert { var-ref "resettable" == "resettable" }
+
+# Ordinary variable lookup is independent of the user-function namespace.
+fn "text" 77
+assert { var-ref "text" == "text" }
+assert { is-immutable-ref { var-ref "text" } }
+assert { is-immutable-ref { copy { var-ref "text" } } == false }
+assert { id { text } == 77 }

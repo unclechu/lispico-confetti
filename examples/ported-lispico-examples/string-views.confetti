@@ -1,0 +1,46 @@
+# String slices are read-only views, even for empty ranges.
+var "source" "Hello, world!"
+var "middle" { str-slice source 7 5 }
+assert { is-immutable-ref middle }
+assert { middle == "world" }
+assert { is-immutable-ref { str-take source 0 } }
+assert { is-immutable-ref { str-drop source 13 } }
+assert { str-size { str-drop source 13 } == 0 }
+
+# Nested views keep pointing to the same backing allocation.
+var "nested" { str-take { str-drop middle 1; id 3 } }
+assert { nested == "orl" }
+str-set "source" 8 { str-char "O" }
+assert { middle == "wOrld" }
+assert { nested == "Orl" }
+
+# Replacing the original variable’s allocation does not retarget a view.
+str-resize "source" 4
+gc
+assert { middle == "wOrld" }
+assert { nested == "Orl" }
+
+# Explicit copies remain mutable and independent from their source views.
+var "mutable" { copy middle }
+assert { is-immutable-ref mutable == false }
+str-set "mutable" 0 { str-char "W" }
+assert { mutable == "WOrld" }
+assert { middle == "wOrld" }
+
+# Constructing a fresh string from an unterminated view also works.
+assert { str "prefix:" nested == "prefix:Orl" }
+assert { str-len { str-take "a\\0b" 3 } == 1 }
+assert { type i32 { str-slice "x-123y" 1 4 } == -123 }
+
+# Arrays can hold immutable string elements while remaining mutable.
+var "views" { arr { str-take "abcd" 2; str-drop "xyz" 1 } }
+assert { is-immutable-ref views == false }
+assert { has-immutable-refs views }
+assert { arr-get views 0 == "ab" }
+arr-set "views" 0 { copy { arr-get views 0 } }
+assert { is-immutable-ref { arr-get views 0 } == false }
+assert { is-immutable-ref { arr-get views 1 } }
+
+# The empty, unallocated string element also supports a zero-byte view.
+arr-new "empty-strings" s 1
+assert { is-immutable-ref { str-drop { arr-get empty-strings 0; id 0 } } }
