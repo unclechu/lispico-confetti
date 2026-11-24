@@ -20,6 +20,12 @@ jobs:
       - name: Build Lispico
         run: nix-build -A lispico-confetti
 
+      - name: Build Nix-provided sources (substitution for Git submodules)
+        run: |
+          rmdir -v lispico confetti
+          nix-build -A lispico-src -o lispico
+          nix-build -A confetti-src -o confetti
+
       - name: Run examples tests
         run: bash tests/run-examples.sh
         env:
@@ -27,14 +33,15 @@ jobs:
 
       - name: Run C tests
         run: |
-          rmdir -v lispico confetti
-          nix-build -A lispico-src -o lispico
-          nix-build -A confetti-src -o confetti
-          nix-shell --run './tests/run-c.sh'
-          rm -v lispico confetti
-          mkdir -v lispico confetti
+          nix-shell --run ./tests/run-c.sh
 
       - name: Measure time and memory usage for all examples
-        run: nix-shell --run './tests/measure-examples.sh'
+        run: nix-shell --run ./tests/measure-examples.sh
         env:
           LISPICO_EXECUTABLE: ./result/bin/lispico-confetti
+
+      # Avoid the CI job finishing with a warning
+      - name: Cleanup Nix-provided sources builds (substitution for Git submodules)
+        run: |
+          rm -v lispico confetti
+          mkdir -v lispico confetti

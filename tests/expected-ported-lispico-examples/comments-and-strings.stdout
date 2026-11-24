@@ -1,3 +1,0 @@
-A quoted string: "hello"
-Tab:	end
-SYM_VARIABLE(TYPE_STRING("Hello, World!"))

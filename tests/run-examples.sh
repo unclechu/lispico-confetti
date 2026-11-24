@@ -15,6 +15,7 @@ SCRIPT_DIR=$(dirname -- "${BASH_SOURCE[0]}")
 cd -- "$SCRIPT_DIR/.." # Switch to project root
 
 : "${LISPICO_EXECUTABLE:=./lispico-confetti}"
+: "${EXPECTED_PORTED_LISPICO_EXAMPLES_DIR:=lispico/tests/expected-examples}"
 
 LISPICO_EXECUTABLE_NAME=${LISPICO_EXECUTABLE##*/}
 LISPICO_EXECUTABLE_DIR=$(dirname -- "$LISPICO_EXECUTABLE")
@@ -146,7 +147,7 @@ for source in examples/ported-lispico-examples/*.confetti; do
   name="${source##*/}"
   name="${name%.confetti}"
 
-  run_test "$source" "tests/expected-ported-lispico-examples/$name"
+  run_test "$source" "$EXPECTED_PORTED_LISPICO_EXAMPLES_DIR/$name"
 done
 
 # Test all expected failures

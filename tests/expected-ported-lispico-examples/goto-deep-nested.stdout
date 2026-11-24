@@ -1,6 +1,0 @@
-foo
-bar
-baz
-will print baz again
-baz
-SYM_VARIABLE(TYPE_STRING("done"))

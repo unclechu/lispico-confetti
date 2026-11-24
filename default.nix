@@ -118,6 +118,10 @@ let
     runCommand "${projectName}-lispico-src" {} ''
       mkdir -- "$out"
       cp -R -- ${lib.escapeShellArg "${lispicoSrc}"}/src/ "$out"/
+
+      # Include example expectation files for the CI tests
+      mkdir -p -- "$out/tests"
+      cp -R -- ${lib.escapeShellArg "${lispicoSrc}"}/tests/expected-examples/ "$out"/tests/
     '';
 
   confetti-src =
