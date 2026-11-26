@@ -16,6 +16,7 @@ cd -- "$SCRIPT_DIR/.." # Switch to project root
 
 : "${LISPICO_EXECUTABLE:=./lispico-confetti}"
 : "${EXPECTED_PORTED_LISPICO_EXAMPLES_DIR:=lispico/tests/expected-examples}"
+: "${EXPECTED_PORTED_LISPICO_EXAMPLES_EXCEPTIONS_DIR:=tests/expected-ported-examples}"
 
 LISPICO_EXECUTABLE_NAME=${LISPICO_EXECUTABLE##*/}
 LISPICO_EXECUTABLE_DIR=$(dirname -- "$LISPICO_EXECUTABLE")
@@ -64,9 +65,31 @@ run_test() {
   local EXPECTED="$2"
   local NAME="${SOURCE#./}"
 
-  local EXPECTED_OUT_FILE=${EXPECTED}.stdout
-  local EXPECTED_ERR_FILE=${EXPECTED}.stderr
-  local EXPECTED_EXITCODE_FILE=${EXPECTED}.exitcode
+  if [[ "${SOURCE%/*}" == examples/ported-lispico-examples ]]; then
+    local CHECK_FOR_EXCEPTIONS=1
+    local TEST_NAME=${EXPECTED##*/}
+    local EXCEPTIONS_DIR=$EXPECTED_PORTED_LISPICO_EXAMPLES_EXCEPTIONS_DIR
+  else
+    local CHECK_FOR_EXCEPTIONS=0
+  fi
+
+  if (( CHECK_FOR_EXCEPTIONS == 1 )) && [[ -e "${EXCEPTIONS_DIR}/${TEST_NAME}.stdout" ]]; then
+    local EXPECTED_OUT_FILE=${EXCEPTIONS_DIR}/${TEST_NAME}.stdout
+  else
+    local EXPECTED_OUT_FILE=${EXPECTED}.stdout
+  fi
+
+  if (( CHECK_FOR_EXCEPTIONS == 1 )) && [[ -e "${EXCEPTIONS_DIR}/${TEST_NAME}.stderr" ]]; then
+    local EXPECTED_ERR_FILE=${EXCEPTIONS_DIR}/${TEST_NAME}.stderr
+  else
+    local EXPECTED_ERR_FILE=${EXPECTED}.stderr
+  fi
+
+  if (( CHECK_FOR_EXCEPTIONS == 1 )) && [[ -e "${EXCEPTIONS_DIR}/${TEST_NAME}.exitcode" ]]; then
+    local EXPECTED_EXITCODE_FILE=${EXCEPTIONS_DIR}/${TEST_NAME}.exitcode
+  else
+    local EXPECTED_EXITCODE_FILE=${EXPECTED}.exitcode
+  fi
 
   local expected_exit_code=0
   local actual_exit_code=0

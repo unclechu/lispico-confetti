@@ -1,0 +1,3 @@
+[FAIL] Evaluation failed: examples/ported-lispico-examples/fail-call.confetti:1:1: (fail) evaluation failed: Called through native dispatch
+1 | call "fail" "Called through native dispatch"
+  | ↑

@@ -1,0 +1,1 @@
+fail { str-take "problem details" 7 }

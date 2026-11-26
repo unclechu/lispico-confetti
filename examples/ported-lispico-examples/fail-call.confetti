@@ -1,0 +1,1 @@
+call "fail" "Called through native dispatch"

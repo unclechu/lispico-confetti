@@ -1,0 +1,5 @@
+var "limit" 4
+var "input" "Hello"
+if { id { str-size input } > limit } then {
+  fail { str "Input exceeds " { type s limit; id " bytes" } }
+}

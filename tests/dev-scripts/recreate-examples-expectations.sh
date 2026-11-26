@@ -70,17 +70,30 @@ only_missing=false
 handle-example() {
   set -o errexit || exit; set -o errtrace; set -o nounset; set -o pipefail
 
-  if (( $# != 1 )); then
+  local ported_stderr_exception_dir=
+  if (( $# == 3 )) && [[ $2 == ported-stderr-exception && -n $3 ]]; then
+    ported_stderr_exception_dir=$3
+  elif (( $# != 1 )); then
     >&2 printf \
       '%s[FAIL]%s handle-example(): Unexpected amount of arguments: %s%d%s\n' \
       "$E_FAIL_COLOR" "$E_RESET_COLOR" \
       "$E_FAIL_COLOR" "$#" "$E_RESET_COLOR"
     return 1
-  elif [[ -z $1 || ! -s $1 ]]; then
+  fi
+
+  if [[ -z $1 || ! -s $1 ]]; then
     >&2 printf \
       '%s[FAIL]%s handle-example(): Example file “%s%s%s” does not exist\n' \
       "$E_FAIL_COLOR" "$E_RESET_COLOR" \
       "$E_FAIL_COLOR" "$1" "$E_RESET_COLOR"
+    return 1
+  fi
+
+  if [[ -n $ported_stderr_exception_dir && ! -d $ported_stderr_exception_dir ]]; then
+    >&2 printf \
+      '%s[FAIL]%s handle-example(): Ported stderr exceptions directory “%s%s%s” does not exist\n' \
+      "$E_FAIL_COLOR" "$E_RESET_COLOR" \
+      "$E_FAIL_COLOR" "$ported_stderr_exception_dir" "$E_RESET_COLOR"
     return 1
   fi
 
@@ -94,7 +107,9 @@ handle-example() {
 
   local exit_code=0
 
-  if [[ $dir == examples/fail ]]; then
+  if [[ -n $ported_stderr_exception_dir ]]; then
+    local subdir=
+  elif [[ $dir == examples/fail ]]; then
     local subdir=fail/
   elif [[ $dir == examples ]]; then
     local subdir=
@@ -123,7 +138,10 @@ handle-example() {
       "$O_SECONDARY_COLOR" "$O_RESET_COLOR" \
       "$O_SECONDARY_COLOR" "$source" "$O_RESET_COLOR"
 
-    if [[ ${source##*/} == shebang.confetti ]]; then
+    if [[ -n $ported_stderr_exception_dir ]]; then
+      "$LISPICO_EXECUTABLE" --source-highlight=none -ps "$source" \
+        >/dev/null 2>"$ported_stderr_exception_dir/${name}.stderr" || exit_code=$?
+    elif [[ ${source##*/} == shebang.confetti ]]; then
       PATH="$LISPICO_EXECUTABLE_DIR:$PATH" LISPICO_SOURCE_HIGHLIGHT=none \
         "$source" >"$expectation_out" 2>"$expectation_err" || exit_code=$?
     else
@@ -131,7 +149,9 @@ handle-example() {
         >"$expectation_out" 2>"$expectation_err" || exit_code=$?
     fi
 
-    printf '%d\n' "$exit_code" >"$expectation_ec"
+    if [[ -z $ported_stderr_exception_dir ]]; then
+      printf '%d\n' "$exit_code" >"$expectation_ec"
+    fi
 
     printf \
       '%s%s[ OK ]%s Generated expectations for example file “%s%s%s”\n' \
@@ -180,11 +200,23 @@ elif (( $# == 1 )); then
   source=$1; source=${source#./}
   handle-example "$source"
 
+# Example:
+#   tests/dev-scripts/recreate-examples-expectations.sh examples/ported-lispico-examples/fail-apply.confetti ported-stderr-exception
+elif (( $# == 2 )) && [[ $2 == ported-stderr-exception ]]; then
+
+  if [[ -z $1 || ! -s $1 ]]; then
+    >&2 printf \
+      '%s[FAIL]%s Example file “%s%s%s” does not exist\n' \
+      "$E_FAIL_COLOR" "$E_RESET_COLOR" \
+      "$E_FAIL_COLOR" "$2" "$E_RESET_COLOR"
+    exit 1
+  fi
+
+  source=$1; source=${source#./}
+  handle-example "$source" ported-stderr-exception "tests/expected-ported-examples"
+
 else
-  >&2 printf \
-    '%s[FAIL]%s Unexpected amount of arguments: %s%d%s\n' \
-    "$E_FAIL_COLOR" "$E_RESET_COLOR" \
-    "$E_FAIL_COLOR" "$#" "$E_RESET_COLOR"
+  >&2 printf '%s[FAIL]%s Unexpected arguments\n' "$E_FAIL_COLOR" "$E_RESET_COLOR"
   exit 1
 fi
 

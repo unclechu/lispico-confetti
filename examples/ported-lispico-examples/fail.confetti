@@ -1,0 +1,7 @@
+# The (fail) function can be placed inside an unexecuted (if) branch.
+var "value" 42
+if false {
+  fail { str "This would allocate " { type s value } }
+}
+assert { value == 42 }
+assert { id { kind-of "fail" } == native-fn-kind }

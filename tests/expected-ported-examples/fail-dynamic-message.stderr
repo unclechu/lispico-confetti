@@ -1,0 +1,6 @@
+[FAIL] Evaluation failed: examples/ported-lispico-examples/fail-dynamic-message.confetti:4:3: (fail) evaluation failed: Input exceeds 4 bytes
+1 | var "limit" 4
+2 | var "input" "Hello"
+3 | if { id { str-size input } > limit } then {
+4 |   fail { str "Input exceeds " { type s limit; id " bytes" } }
+  |   ↑
