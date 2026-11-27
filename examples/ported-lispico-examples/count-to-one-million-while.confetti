@@ -1,0 +1,14 @@
+var "counter" 0
+
+while counter < 1_000_000 do {
+  if {
+    id { counter > 0 }
+    && { mod counter 100_000 == 0 }
+  } then {
+    println { str "Counted to " { type s counter } }
+  }
+
+  counter = { counter + 1 }
+}
+
+assert { counter == 1_000_000; id "Must count to one million" }

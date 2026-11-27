@@ -1,0 +1,109 @@
+# `while` evaluates its condition before every iteration.
+var "counter" 0
+while { counter < 5; counter = { counter + 1 } }
+assert { counter == 5 }
+
+# `repeat N` evaluates N only once, and zero skips the body entirely.
+var "count-evaluations" 0
+var "steps" 0
+repeat {
+  do { count-evaluations = { count-evaluations + 1 }; id 4 }
+  steps = { steps + 1 }
+}
+assert { count-evaluations == 1 }
+assert { steps == 4 }
+repeat 0 { fail "Zero iterations must skip the body" }
+assert { steps == 4 }
+
+# One argument denotes an indefinite repeat, not a count.
+repeat do {
+  steps = { steps + 1 }
+  if { steps == 7 } then { break }
+}
+assert { steps == 7 }
+
+# Every iteration is a new implicit `(do)` activation.
+var "deferred" 0
+repeat 4 do {
+  local "value" 10
+  assert { value == 10 }
+  defer { deferred = { deferred + value } }
+  value = 3
+}
+assert { deferred == 12 }
+assert { kind-of "value" == empty-kind }
+
+# `(loop-break-depth N)` counts explicit `(do)` scopes and inner loops.
+var "nested-count" 0
+repeat 5 {
+  repeat 5 do {
+    nested-count = { nested-count + 1 }
+    assert { id { loop-break-depth } == 2 }
+    assert { id { loop-break-depth 1 } == 2 }
+    assert { id { loop-break-depth 2 } == 3 }
+    break 2
+  }
+}
+assert { nested-count == 1 }
+
+# Explicit `(leave)` has the same multi-loop exit semantics.
+repeat {
+  repeat do {
+    nested-count = { nested-count + 1 }
+    leave { loop-break-depth 2 }
+  }
+}
+assert { nested-count == 2 }
+
+# `(break)` can exit a loop when evaluated in a `while` condition.
+var "condition-count" 0
+while {
+  do {
+    condition-count = { condition-count + 1 }
+    if condition-count == 3 { break }
+    id true
+  }
+  assert true
+}
+assert { condition-count == 3 }
+
+# Jumping out of a loop cleans its implicit scope and runs defers.
+var "jump-deferred" 0
+label "outside"
+if jump-deferred == 0 {
+  repeat 3 do {
+    defer { jump-deferred = { jump-deferred + 1 } }
+    goto outside
+  }
+}
+assert { jump-deferred == 1 }
+
+# Multi-loop break unwinds defers in both loop iterations.
+var "unwind-deferred" 0
+repeat 2 do {
+  defer { unwind-deferred = { unwind-deferred + 10 } }
+  repeat 2 do {
+    defer { unwind-deferred = { unwind-deferred + 1 } }
+    break 2
+  }
+}
+assert { unwind-deferred == 11 }
+
+# A backward goto reachable inside the body keeps its existing behavior.
+var "goto-loop-count" 0
+repeat 2 do {
+  label "within-loop"
+  goto-loop-count = { goto-loop-count + 1 }
+  if goto-loop-count < 3 { goto within-loop }
+}
+assert { goto-loop-count == 4 }
+
+# A false initial condition never evaluates the loop body.
+while false { fail "Unreachable while body" }
+
+# A local string remains reachable across manual GC inside an iteration.
+repeat 3 do {
+  local "message" { str "good" "bye" }
+  gc
+  assert { message == "goodbye" }
+}

@@ -1,0 +1,71 @@
+# Loops inside user functions have the same implicit scope semantics.
+fn "sum-first" args n do {
+  local "sum" 0
+  repeat n { set "sum" { sum + 1 } }
+  id sum
+}
+assert { sum-first 7 == 7 }
+assert { sum-first 0 == 0 }
+
+# A return unwinds any number of nested loops and explicit sequences.
+var "unwind-count" 0
+fn "find-answer" {
+  repeat 10 {
+    repeat 10 do {
+      defer { set "unwind-count" { unwind-count + 1 } }
+      return 42
+    }
+  }
+}
+assert { id { find-answer } == 42 }
+assert { unwind-count == 1 }
+
+# Returning from a while condition is also allowed.
+fn "return-from-condition" {
+  while { return "done"; fail "Unreachable" }
+}
+assert { id { return-from-condition } == "done" }
+
+# Breaks stay inside the current function and cannot escape to caller loops.
+fn "nested-breaks" do {
+  local "count" 0
+  repeat 5 {
+    repeat do {
+      set "count" { count + 1 }
+      break 2
+    }
+  }
+  id count
+}
+assert { id { nested-breaks } == 1 }
+
+# Recursive calls must restore the outer loop’s activation and locals.
+fn "recursive-loop" args remaining do {
+  if remaining == 0 { return 0 }
+  repeat 1 do {
+    local "value" remaining
+    assert { recursive-loop { remaining - 1 } == { remaining - 1 } }
+    assert { value == remaining }
+  }
+  id remaining
+}
+assert { id { recursive-loop 4 } == 4 }
+
+# An ordinary `(leave (fn-return-depth))` can exit nested loops too.
+fn "leave-function" {
+  repeat 3 do {
+    leave { fn-return-depth; id 55 }
+  }
+}
+assert { id { leave-function } == 55 }
+
+# A break from a callee’s own loop does not break the caller’s loop.
+fn "inner-loop" {
+  repeat 10 { break }
+}
+var "outer-count" 0
+repeat 4 do {
+    inner-loop
+    set "outer-count" { outer-count + 1 }
+}
+assert { outer-count == 4 }
