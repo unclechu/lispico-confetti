@@ -804,6 +804,59 @@ equivalent to Lispico `(enabled)`. Inside a condition block, use
 See `examples/conditionals.confetti` and `examples/conditionals-root.confetti`
 for executable examples of both condition forms, sequences, and chains.
 
+### While loops
+
+`while` is a Lispico evaluator special form. Confetti accepts the same
+inline single-value and homogeneous infix conditions as `if`, but an
+explicit sequence body uses **`do`**, never `then`:
+
+```confetti
+var "counter" 0
+while counter < 1_000_000 do {
+  counter = {counter + 1}
+}
+```
+
+This translates into:
+
+```lisp
+(while (< counter 1_000_000)
+  (do
+    (set "counter" (+ counter 1))))
+```
+
+A condition requiring a Confetti block can be followed by a separate
+`do { … }` directive, just like the blocked-condition form of `if`:
+
+```confetti
+while {counter < 10} do {
+  counter = {counter + 1}
+}
+```
+
+**An explicit `do` always translates into a Lispico `(do …)` scope**,
+even for a single expression or an empty block. The translator does not
+remove or infer scopes based on the number of expressions. Lispico’s loop
+implementation additionally provides an implicit scope per iteration.
+
+Without `do`, ordinary Confetti function-call argument rules apply:
+
+```confetti
+while {
+  counter < 10
+  counter = {counter + 1}
+}
+while false 123
+```
+
+These translate into `(while (< counter 10) (set "counter" (+ counter 1)))`
+and `(while false 123)` respectively, with **no explicit `(do)`** inserted.
+The condition is evaluated before each iteration, and the body is evaluated
+only when it is true. Lispico’s `(break)`, `(break N)`, and `(return)` work
+within loop bodies according to their normal control-flow semantics.
+
+See `examples/while.confetti` for all these forms and a loop inside a function.
+
 ## Development environment
 
 ### [direnv](https://direnv.net) example

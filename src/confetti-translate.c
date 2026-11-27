@@ -1298,13 +1298,14 @@ static bool translate_call_with_operator_suffix(
   return true;
 }
 
-// An inline condition, such as `if 5 > 2 { … }`, uses Confetti’s ordinary
-// arguments. Only one infix operator may occur in a condition.
+// An inline `if` or `while` condition uses Confetti’s ordinary arguments.
+// A compound condition may repeat one infix operator, as in `if` branches.
 static bool translate_condition_arguments(
   ConfettiTranslator *translator,
   const conf_directive *directive,
   long first,
   long end,
+  const char *form_name,
   uint32_t *index
 ) {
   long count = end - first;
@@ -1315,7 +1316,8 @@ static bool translate_condition_arguments(
     snprintf(
       *translator->error,
       ERR_MSG_SIZE,
-      "`if` expects one condition or a homogeneous infix condition; use { … } for a call"
+      "`%s` expects one condition or a homogeneous infix condition; use { … } for a call",
+      form_name
     );
     return false;
   }
@@ -1470,7 +1472,14 @@ static bool translate_if_clause(
     return false;
   }
   if (
-    !translate_condition_arguments(translator, clause, condition_start, condition_end, condition)
+    !translate_condition_arguments(
+      translator,
+      clause,
+      condition_start,
+      condition_end,
+      "if",
+      condition
+    )
   ) return false;
   if (!translate_conditional_branch(translator, clause, sequence, branch)) return false;
   ++*position;
@@ -1544,6 +1553,64 @@ static bool translate_if_chain(
     break;
   }
 
+  return true;
+}
+
+// Translate the `do` form of `while` without changing ordinary function-call
+// argument blocks. A blocked condition and its `do` body are two neighboring
+// Confetti directives, just like a blocked `if` condition and its branch.
+// An explicit `do { … }` always becomes a real Lispico `(do …)` scope,
+// including when it contains only one expression or is empty.
+static bool translate_while_do(
+  ConfettiTranslator *translator,
+  const conf_directive *container,
+  long *position,
+  uint32_t *index
+) {
+  const conf_directive *clause = conf_get_directive(container, *position);
+  long argc = conf_get_argument_count(clause);
+  bool blocked_condition = argc == 1;
+
+  // Reserve the enclosing `(while …)` before translating its arguments so
+  // its source location and expression index remain attached to `while`.
+  if (!new_expression(translator, EXPR_LIST, directive_offset(clause), index)) return false;
+  uint32_t previous = EXPR_NONE;
+  uint32_t name = EXPR_NONE;
+  if (!new_name(translator, "while", directive_offset(clause), &name)) return false;
+  append_child(translator->interpreter, *index, &previous, name);
+
+  uint32_t condition = EXPR_NONE;
+  uint32_t body = EXPR_NONE;
+  if (blocked_condition) {
+    if (!translate_single_block(translator, clause, &condition)) return false;
+    ++*position;
+
+    const conf_directive *next = conf_get_directive(container, *position);
+    if (
+      conf_get_argument_count(next) != 1 ||
+      !is_bare_argument(translator, conf_get_argument(next, 0), "do") ||
+      !has_directive_block(translator, next)
+    ) {
+      snprintf(*translator->error, ERR_MSG_SIZE, "Blocked `while` expects `do { … }`");
+      return false;
+    }
+    if (!translate_sequence_block(translator, next, &body)) return false;
+  } else {
+    // The final bare `do` introduces the body block; only the preceding
+    // arguments belong to the condition. No `then` keyword is accepted.
+    if (argc == 2) {
+      snprintf(*translator->error, ERR_MSG_SIZE, "`while` requires a condition before `do`");
+      return false;
+    }
+    if (
+      !translate_condition_arguments(translator, clause, 1, argc - 1, "while", &condition)
+    ) return false;
+    if (!translate_sequence_block(translator, clause, &body)) return false;
+  }
+
+  append_child(translator->interpreter, *index, &previous, condition);
+  append_child(translator->interpreter, *index, &previous, body);
+  ++*position;
   return true;
 }
 
@@ -1684,6 +1751,35 @@ static bool translate_sequence_item_one(
   long count = conf_get_directive_count(container);
   const conf_directive *next =
     *position + 1 < count ? conf_get_directive(container, *position + 1) : NULL;
+
+  if (is_bare_argument(translator, first, "while")) {
+    long argc = conf_get_argument_count(directive);
+    bool has_block = has_directive_block(translator, directive);
+    if (
+      has_block &&
+      argc > 1 &&
+      is_bare_argument(translator, conf_get_argument(directive, argc - 1), "then")
+    ) {
+      snprintf(*translator->error, ERR_MSG_SIZE, "`while` uses `do { … }`, not `then { … }`");
+      return false;
+    }
+    bool inline_do = (
+      has_block &&
+      argc > 1 &&
+      is_bare_argument(translator, conf_get_argument(directive, argc - 1), "do")
+    );
+    bool next_do = (
+      argc == 1 &&
+      has_block &&
+      next != NULL &&
+      is_bare_argument(translator, conf_get_argument(next, 0), "do")
+    );
+
+    // A plain `while CONDITION BODY` call and a regular `{ … }` argument
+    // block keep the existing call translation, without adding a scope.
+    if (inline_do || next_do)
+      return translate_while_do(translator, container, position, index);
+  }
 
   if (is_bare_argument(translator, first, "fn")) {
     long argc = conf_get_argument_count(directive);

@@ -1,0 +1,46 @@
+# Inline infix conditions use the same expression rules as `if`.
+var "counter" 0
+var "sequence-depth" 0
+while counter < 3 do {
+  override "sequence-depth" {depth}
+  counter = {counter + 1}
+}
+assert {counter == 3}
+# The loop’s implicit scope and the explicit `do` both contribute to depth.
+assert {sequence-depth == 2}
+
+# A condition block and an explicit `do` body are adjacent directives.
+while {counter < 5} do {
+  counter = {counter + 1}
+}
+assert {counter == 5}
+
+# Without `do`, a normal argument block supplies two arguments and no
+# additional sequence scope beyond the implicit scope of Lispico’s loop.
+while {
+  counter < 7
+  counter = {counter + 1}
+}
+assert {counter == 7}
+
+# An ordinary call with two arguments needs no special translation.
+while false 123
+assert {counter == 7}
+
+# Empty and single-expression `do` bodies keep their explicit scope.
+while false do {}
+while true do {break}
+
+# `return` unwinds the loop and the enclosing function activation.
+fn "find-value" args wanted do {
+  local "index" 0
+  while index < 10 do {
+    if index == wanted then {return index}
+    set "index" {index + 1}
+  }
+  return 99
+}
+assert {find-value 4 == 4}
+assert {find-value 20 == 99}
+
+id empty
