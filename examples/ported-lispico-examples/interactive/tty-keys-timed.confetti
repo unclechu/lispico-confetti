@@ -1,0 +1,42 @@
+# Interactive desktop example: run in a real terminal, not with piped stdin.
+# Controls: W/A/S/D, Q to quit. TTY input works without pressing Enter.
+#
+# Example: ./lispico-confetti -ps examples/ported-lispico-examples/interactive/tty-keys-timed.confetti
+
+set-stdout-buffering 0
+
+arr-new "terminal-size" u32 3
+terminal-size[2] = 123
+tty-size "terminal-size"
+
+println {
+  str {
+    id "Terminal size: "
+    type s terminal-size[0]
+    id " columns by "
+    type s terminal-size[1]
+    id " rows"
+  }
+}
+assert { terminal-size[2] == 123 }
+
+println "Press W/A/S/D to move, Q to quit."
+tty-enable
+do {
+  defer { tty-disable }
+
+  var "running" true
+  var "key" 0
+  while running do {
+    # A timed read updates key only on success and returns a boolean.
+    if { tty-read-byte "key" 100 } do {
+      if key == 119 { println "Up" }
+      if key == 97 { println "Left" }
+      if key == 115 { println "Down" }
+      if key == 100 { println "Right" }
+      if key == 113 { running = false }
+    }
+  }
+}
+
+println "TTY settings restored."

@@ -1,0 +1,13 @@
+# Monotonic time is a wrapping u32 count of whole milliseconds.
+var "started" { monotonic-ms }
+assert { type-of started == u32 }
+
+sleep-ms 5
+
+# Unsigned subtraction handles a 32-bit wrap between the two readings.
+var "elapsed" { id { monotonic-ms } - started }
+assert { elapsed >= 1 }
+assert { elapsed < 60000 }
+
+# Reading the clock does not allocate GC-managed storage.
+assert { id { gc } == 0 }

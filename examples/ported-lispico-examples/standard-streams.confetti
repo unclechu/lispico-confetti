@@ -1,0 +1,14 @@
+# Configure each process-wide C stream once, before its first use.
+# Full buffering uses exactly the requested amount of backing storage.
+set-stdout-buffering 32
+set-stderr-buffering "line"
+
+print "Hello, "
+println "buffered world!"
+flush-stdout
+
+eprint "Error stream: "
+eprintln "line buffered"
+flush-stderr
+
+assert { id { gc } == 0 }
