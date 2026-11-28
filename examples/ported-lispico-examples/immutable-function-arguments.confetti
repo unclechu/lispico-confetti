@@ -1,0 +1,70 @@
+# Immutable argument declarations borrow strings and arrays without copying.
+# All arguments, including unnamed variadic ones, become read-only views.
+fn "debug-log" immutable-var-args msg1 do {
+  assert { is-immutable-ref msg1 }
+  eprint "[DEBUG]"
+  local "i" 0
+  repeat argc do {
+    assert { is-immutable-ref { get-arg i } }
+    eprint " "
+    eprint { get-arg i }
+    i = { i + 1 }
+  }
+  eprintln ""
+}
+
+assert { id { gc } == 0 }
+debug-log "test" "test" "test"
+assert { id { gc } == 0 }
+
+# Fixed-arity arguments also get immutable views, with no mutable copy.
+fn "inspect" immutable-args text numbers do {
+  assert { is-immutable-ref text }
+  assert { is-immutable-ref numbers }
+  assert { is-immutable-ref { get-arg 0 } }
+  assert { is-immutable-ref { get-arg 1 } }
+  assert { text == "hello" }
+  assert { arr-get numbers 0 == 10 }
+  id text
+}
+var "text" "hello"
+var "numbers" { arr 10 20 }
+var "view" { inspect text numbers }
+assert { is-immutable-ref view }
+$text[0] = 72
+assert { view == "Hello" }
+assert { text == "Hello" }
+assert { is-immutable-ref text == false }
+assert { is-immutable-ref numbers == false }
+
+# Plain `(args)` keeps its original copy semantics and mutable locals.
+fn "change" args input do {
+  assert { is-immutable-ref input == false }
+  assert { is-immutable-ref { get-arg 0 } == false }
+  $input[0] = 88
+  id input
+}
+assert { change text == "Xello" }
+assert { text == "Hello" }
+
+# An immutable variadic declaration may omit named arguments entirely.
+fn "tail" immutable-var-args { get-arg { argc - 1 } }
+assert { tail "first" "last" == "last" }
+assert { is-immutable-ref { tail "first" "last" } }
+
+# Numeric values are passed unchanged; immutable status applies to
+# strings and arrays only. Function recursion uses separate argument frames.
+fn "sum-down" immutable-args n do {
+  if n == 0 { return 0 }
+  n + sum-down { n - 1 }
+}
+assert { sum-down 4 == 10 }
+
+# A temporary string remains reachable via a borrowed return value.
+fn "handoff" immutable-args "value" do {
+  gc
+  id value
+}
+var "saved" { handoff { str "live" "!" } }
+gc
+assert { saved == "live!" }
